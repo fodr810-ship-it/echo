@@ -9,24 +9,28 @@ class JoinView(discord.ui.View):
         super().__init__(timeout=30.0)
         self.players = []
 
-    @discord.ui.button(label="🎮 انضمام للعبة", style=discord.ButtonStyle.secondary) # زر شفاف
+    @discord.ui.button(label="🎮 انضمام للعبة", style=discord.ButtonStyle.secondary) # زر شفاف (رمادي)
     async def join(self, interaction: discord.Interaction, button: discord.ui.Button):
         if interaction.user in self.players:
             await interaction.response.send_message("أنت مسجل بالفعل في القائمة! 🏎️", ephemeral=True)
             return
 
         self.players.append(interaction.user)
-        # رسالة تأكيد مخفية للاعب
+        # رسالة تأكيد مخفية تماماً وخاصة باللاعب
         await interaction.response.send_message("✅ انضممت للعبة الكراسي بنجاح! استعد 🪑", ephemeral=True)
         
-        # تحديث الـ Embed الأساسي مباشرة بالعدّاد الجديد
+        # تحديث الـ Embed الأساسي فوراً بالعداد الجديد
         updated_embed = discord.Embed(
             title="🎮 لعبة الكراسي",
             description="اضغط على الزر بالأسفل للاشتراك في اللعبة.\nتبدأ اللعبة خلال 30 ثانية (مطلوب لاعبين على الأقل).",
-            color=0x2b2d31 # لون داكن فخم ومتناسق
+            color=0x2b2d31
         )
         updated_embed.add_field(name="👥 عدد المشاركين الحالي", value=f"📡 **{len(self.players)}** لاعبين", inline=False)
-        await interaction.message.edit(embed=updated_embed)
+        
+        try:
+            await interaction.message.edit(embed=updated_embed)
+        except discord.HTTPException:
+            pass
 
 # --- كلاس زر الكرسي الشفاف السريع ---
 class ChairButton(discord.ui.View):
@@ -36,7 +40,7 @@ class ChairButton(discord.ui.View):
         self.max_chairs = max_chairs
         self.saved_players = []
 
-    @discord.ui.button(label="🪑 اجلس هنا بسرعة!", style=discord.ButtonStyle.secondary) # تم تعديله ليصبح شفافاً
+    @discord.ui.button(label="🪑 اجلس هنا بسرعة!", style=discord.ButtonStyle.secondary) # زر الكرسي شفاف أيضاً
     async def click_chair(self, interaction: discord.Interaction, button: discord.ui.Button):
         if interaction.user not in self.players:
             await interaction.response.send_message("عذراً، أنت لست من ضمن اللاعبين في هذه الجولة! ❌", ephemeral=True)
@@ -54,7 +58,7 @@ class ChairButton(discord.ui.View):
         else:
             await interaction.response.send_message("للأسف امتلأت الكراسي! 😭", ephemeral=True)
 
-# --- كلاس الـ Cog الأساسي ---
+# --- كلاس الـ Cog الأساسي المتين ---
 class KrasiCog(commands.Cog):
     def __init__(self, bot):
         self.bot = bot
@@ -68,84 +72,96 @@ class KrasiCog(commands.Cog):
 
         self.active_games[ctx.channel.id] = True
 
-        # إمبيد التسجيل الأنيق الأول للعبة
-        start_embed = discord.Embed(
-            title="🎮 لعبة الكراسي",
-            description="اضغط على الزر بالأسفل للاشتراك في اللعبة.\nتبدأ اللعبة خلال 30 ثانية (مطلوب لاعبين على الأقل).",
-            color=0x2b2d31
-        )
-        start_embed.add_field(name="👥 عدد المشاركين الحالي", value="📡 **0** لاعبين", inline=False)
+        # استخدام try...finally يضمن حتمية فتح الروم للألعاب القادمة حتى لو حدث خطأ غير متوقع
+        try:
+            start_embed = discord.Embed(
+                title="🎮 لعبة الكراسي",
+                description="اضغط على الزر بالأسفل للاشتراك في اللعبة.\nتبدأ اللعبة خلال 30 ثانية (مطلوب لاعبين على الأقل).",
+                color=0x2b2d31
+            )
+            start_embed.add_field(name="👥 عدد المشاركين الحالي", value="📡 **0** لاعبين", inline=False)
 
-        join_view = JoinView()
-        init_msg = await ctx.send(embed=start_embed, view=join_view)
+            join_view = JoinView()
+            init_msg = await ctx.send(embed=start_embed, view=join_view)
 
-        await asyncio.sleep(30)
-        
-        # تعديل الإمبيد فور انتهاء وقت التسجيل لغلق الأزرار
-        end_embed = discord.Embed(
-            title="🎮 لعبة الكراسي",
-            description="⌛ **انتهى وقت التسجيل!**",
-            color=0x2b2d31
-        )
-        end_embed.add_field(name="👥 إجمالي المشاركين", value=f"🏆 **{len(join_view.players)}** لاعبين", inline=False)
-        await init_msg.edit(embed=end_embed, view=None)
+            await asyncio.sleep(30)
+            
+            try:
+                end_embed = discord.Embed(
+                    title="🎮 لعبة الكراسي",
+                    description="⌛ **انتهى وقت التسجيل!**",
+                    color=0x2b2d31
+                )
+                end_embed.add_field(name="👥 إجمالي المشاركين", value=f"🏆 **{len(join_view.players)}** لاعبين", inline=False)
+                await init_msg.edit(embed=end_embed, view=None)
+            except discord.HTTPException:
+                pass
 
-        players = join_view.players
+            players = join_view.players
 
-        if len(players) < 2:
-            await ctx.send("❌ تم إلغاء اللعبة لعدم وجود عدد كافٍ من اللاعبين.")
+            if len(players) < 2:
+                await ctx.send("❌ تم إلغاء اللعبة لعدم وجود عدد كافٍ من اللاعبين.")
+                return
+
+            round_num = 1
+            while len(players) > 1:
+                await asyncio.sleep(2)
+                
+                round_embed = discord.Embed(
+                    title=f"✨ الجولة {round_num}",
+                    description="**استعدوا... ⏳**",
+                    color=0x2b2d31
+                )
+                round_msg = await ctx.send(embed=round_embed)
+
+                # وقت عشوائي حماسي قبل ظهور الكراسي
+                await asyncio.sleep(random.randint(4, 9))
+
+                max_chairs = len(players) - 1
+                chair_view = ChairButton(players, max_chairs)
+
+                chair_embed = discord.Embed(
+                    title="🛑 إلحق الكرسي!!!",
+                    description=f"اضغط على الزر بالأسفل فوراً!\nالكراسي المتبقية: **{max_chairs}** فقط! 🏃‍♂️",
+                    color=0x2b2d31
+                )
+                
+                alert_msg = await ctx.send(embed=chair_embed, view=chair_view)
+                
+                # حذف رسالة "استعدوا" بذكاء دون إيقاف اللعبة لو قام مشرف بحذفها يدوياً
+                try:
+                    await round_msg.delete()
+                except discord.DiscordException:
+                    pass
+
+                await chair_view.wait()
+
+                # فرز الخاسرين في الجولة
+                eliminated = [p for p in players if p not in chair_view.saved_players]
+
+                for p in eliminated:
+                    players.remove(p)
+                    await ctx.send(f"💀 للأسف {p.mention} ما لحق وتم إقصاؤه!")
+
+                try:
+                    await alert_msg.edit(view=None)
+                except discord.HTTPException:
+                    pass
+                
+                round_num += 1
+
+            # إعلان الفائز المحترف بالثيم الذهبي
+            winner = players[0]
+            winner_embed = discord.Embed(
+                title="🏆 مبرووووووك 🏆",
+                description=f"ملك الكراسي المحترف في هذه اللعبة هو:\n👑 {winner.mention} 👑",
+                color=0xfadb14
+            )
+            await ctx.send(embed=winner_embed)
+
+        finally:
+            # تنظيف الروم والسماح ببدء ألعاب جديدة دائماً مهما حدث
             self.active_games.pop(ctx.channel.id, None)
-            return
-
-        round_num = 1
-        while len(players) > 1:
-            await asyncio.sleep(2)
-            
-            # رسالة الاستعداد البسيطة والجميلة داخل إمبيد بدون حشو الموسيقى
-            round_embed = discord.Embed(
-                title=f"✨ الجولة {round_num}",
-                description="**استعدوا... ⏳**",
-                color=0x2b2d31
-            )
-            round_msg = await ctx.send(embed=round_embed)
-
-            # وقت عشوائي سريع قبل ظهور الكرسي
-            await asyncio.sleep(random.randint(4, 9))
-
-            max_chairs = len(players) - 1
-            chair_view = ChairButton(players, max_chairs)
-
-            # إمبيد ظهور الكراسي السريع للضغط
-            chair_embed = discord.Embed(
-                title="🛑 إلحق الكرسي!!!",
-                description=f"اضغط على الزر بالأسفل فوراً!\nالكراسي المتبقية: **{max_chairs}** فقط! 🏃‍♂️",
-                color=0x2b2d31
-            )
-            
-            alert_msg = await ctx.send(embed=chair_embed, view=chair_view)
-            await round_msg.delete() # حذف رسالة "استعدوا" السابقة لجعل الشات نظيفاً تماماً وعصرياً
-
-            await chair_view.wait()
-
-            # حصر الخاسرين
-            eliminated = [p for p in players if p not in chair_view.saved_players]
-
-            for p in eliminated:
-                players.remove(p)
-                await ctx.send(f"💀 للأسف {p.mention} ما لحق وتم إقصاؤه!")
-
-            await alert_msg.edit(view=None)
-            round_num += 1
-
-        # إعلان الفائز النهائي بإمبيد ذهبي خاص بالفوز
-        winner = players[0]
-        winner_embed = discord.Embed(
-            title="🏆 مبرووووووك 🏆",
-            description=f"ملك الكراسي المحترف في هذه اللعبة هو:\n👑 {winner.mention} 👑",
-            color=0xfadb14 # لون ذهبي مخصص للفائز لإعطاء مظهر متناسق وجذاب
-        )
-        await ctx.send(embed=winner_embed)
-        self.active_games.pop(ctx.channel.id, None)
 
 async def setup(bot):
     await bot.add_cog(KrasiCog(bot))
