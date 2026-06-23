@@ -1,19 +1,21 @@
 import discord
 from discord.ext import commands
 import asyncio
-from typing import List
+from typing import List, Optional
 
-# 1. كلاس لوحة اللعب الحسابية (من GitHub)
+# 1. كلاس لوحة اللعب الحسابية (المعدل ليدعم تبديل الأدوار)
 class TicTacToeView(discord.ui.View):
     X = 1
     O = -1
     Tie = 2
 
-    def __init__(self, player_x: discord.Member, player_o: discord.Member):
+    def __init__(self, player_x: discord.Member, player_o: discord.Member, starter: Optional[discord.Member] = None):
         super().__init__(timeout=60.0)
         self.player_x = player_x  # لاعب X
         self.player_o = player_o  # لاعب O
-        self.current_player = player_x  # البداية لـ X
+        
+        # 🔄 إذا تم تحديد لاعب للبدء (مثل جولة الإعادة) نختاره، وإلا الافتراضي هو player_x
+        self.current_player = starter if starter else player_x  
 
         # بناء مصفوفة اللوحة 3x3 حسابياً
         self.board: List[List[int]] = [
@@ -106,7 +108,11 @@ class TicTacToeButton(discord.ui.Button['TicTacToeView']):
                     child.disabled = True
                 view.stop()
             elif winner == view.Tie:
-                # في حال التعادل: يرسل رسالة تعادل ويعيد الجيم تلقائياً بعد ثانيتين
+                # 🔄 في حال التعادل: نعكس البادئ في جولة الإعادة القادمة
+                # إذا كان اللي بدأ الجيم الحالي هو player_x، نـخـلّي البادئ القادم هو player_o
+                # تلميذاً لفكرتك، قمنا بتبديل الأدوار هنا بالظبط 👇
+                next_starter = view.player_o if view.current_player == view.player_x else view.player_x
+                
                 content = '🤝 **تعادل!** جاري بدء مباراة الإعادة تلقائياً خلال ثانيتين...'
                 for child in view.children:
                     child.disabled = True
@@ -115,9 +121,15 @@ class TicTacToeButton(discord.ui.Button['TicTacToeView']):
                 await interaction.response.edit_message(content=content, view=view)
                 await asyncio.sleep(2)
                 
-                # بدء الجيم الجديد تلقائياً بنفس اللاعبين
-                new_view = TicTacToeView(view.player_x, view.player_o)
-                await interaction.channel.send(content=f"🔄 **مباراة الإعادة!**\nالدور الحالي: {new_view.player_x.mention} (❌)", view=new_view)
+                # بدء الجيم الجديد تلقائياً مع تمرير البادئ الجديد (الخصم الثاني)
+                new_view = TicTacToeView(view.player_x, view.player_o, starter=next_starter)
+                
+                # تحديد العلامة التي سيبدأ بها الجيم القادم في النص للتوضيح
+                starter_sign = "❌" if next_starter == view.player_x else "⭕"
+                await interaction.channel.send(
+                    content=f"🔄 **مباراة الإعادة! (تم تبديل دور البداية للعدالة)**\nالدور الحالي والافتتاحي: {next_starter.mention} ({starter_sign})", 
+                    view=new_view
+                )
                 return
 
         await interaction.response.edit_message(content=content, view=view)
@@ -142,7 +154,7 @@ class JoinGameView(discord.ui.View):
         # تحويل الرسالة فوراً إلى لوحة اللعب الحسابية بدون أي تأخير
         game_view = TicTacToeView(self.p1, interaction.user)
         await interaction.response.edit_message(
-            content=f"🏁 **بدأت المباراة!**\n{self.p1.mention} (❌)  **Vs**  {interaction.user.mention} (⭕)\n\nالدور الحالي: {self.p1.mention} (❌)", 
+            content=f"🏁 **بدأت المباراة!**\n{self.p1.mention} (❌)  **Vs** {interaction.user.mention} (⭕)\n\nالدور الحالي: {self.p1.mention} (❌)", 
             view=game_view
         )
 
