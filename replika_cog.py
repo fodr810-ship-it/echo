@@ -7,15 +7,12 @@ class ReplikaGame:
     def __init__(self, ctx):
         self.ctx = ctx
         self.players = []
-        self.is_registration_open = True
 
 class ReplikaCog(commands.Cog):
     def __init__(self, bot):
         self.bot = bot
         self.active_games = {}
-        # قائمة الحروف المتاحة للعب
         self.letters = ["أ", "ب", "ت", "ج", "ح", "خ", "د", "ر", "ز", "س", "ش", "ص", "ط", "ع", "غ", "ف", "ق", "ك", "ل", "م", "ن", "هـ", "و", "ي"]
-        # الأقسام المطلوبة
         self.categories = ["اسم 🧑", "حيوان 🦁", "نبات 🌿", "جماد 📦", "دولة 🗺️"]
 
     @commands.command(name="ريبلكا", aliases=["replika"])
@@ -26,10 +23,9 @@ class ReplikaCog(commands.Cog):
         game = ReplikaGame(ctx)
         self.active_games[ctx.channel.id] = game
 
-        # ⏱️ 1. مرحلة فتح التسجيل عبر الأزرار
         embed = discord.Embed(
-            title="🎮 لعبة ريبلكا (إنسان حيوان نبات الإقصائية) 🎮",
-            description="**طريقة اللعب:**\n1️⃣ اضغط على الزر أدناه لدخول اللعبة.\n2️⃣ يتم اختيار حرف عشوائي كل جولة.\n3️⃣ لكل قسم، يتم اختيار لاعب عشوائي ليرسل الكلمة المناسبة للحرف.\n4️⃣ آخر لاعب يصمد في الحلبة هو الفائز!\n\n⏱️ **الوقت المتبقي للتسجيل: 30 ثانية**\n\n**المشاركين حالياً:**\nلا يوجد أحد بعد.",
+            title="🎮 لعبة ريبلكا الإقصائية 🎮",
+            description="اضغط على الزر أدناه للمشاركة. آخر لاعب يصمد هو الفائز!",
             color=discord.Color.teal()
         )
         
@@ -39,99 +35,67 @@ class ReplikaCog(commands.Cog):
             @discord.ui.button(label="دخول اللعبة 🕹️", style=discord.ButtonStyle.blurple)
             async def join_btn(self, interaction: discord.Interaction, button: discord.ui.Button):
                 if interaction.user in game.players:
-                    return await interaction.response.send_message("❌ أنت مسجل في اللعبة بالفعل!", ephemeral=True)
+                    return await interaction.response.send_message("❌ أنت مسجل بالفعل!", ephemeral=True)
                 game.players.append(interaction.user)
-                
-                players_list = "\n".join([f"🔹 {p.mention}" for p in game.players])
-                embed.description = f"**طريقة اللعب:**\n1️⃣ اضغط على الزر أدناه لدخول اللعبة.\n2️⃣ يتم اختيار حرف عشوائي كل جولة.\n3️⃣ لكل قسم، يتم اختيار لاعب عشوائي ليرسل الكلمة المناسبة للحرف.\n4️⃣ آخر لاعب يصمد في الحلبة هو الفائز!\n\n⏱️ **الوقت المتبقي للتسجيل: 30 ثانية**\n\n**المشاركين حالياً ({len(game.players)}):**\n{players_list}"
-                await interaction.response.edit_message(embed=embed)
+                await interaction.response.send_message(f"✅ انضم {interaction.user.mention} للعبة!", ephemeral=True)
 
         view = RegisterView()
-        msg = await ctx.send(embed=embed, view=view)
-        
-        await asyncio.sleep(30) # انتظار انتهاء التسجيل
+        await ctx.send(embed=embed, view=view)
+        await asyncio.sleep(30)
         view.stop()
 
         if len(game.players) < 2:
-            if ctx.channel.id in self.active_games:
-                del self.active_games[ctx.channel.id]
-            return await ctx.send("❌ تم إلغاء اللعبة بسبب عدم وجود لاعبين كافيين (أقل شيء لاعبين 2).")
+            del self.active_games[ctx.channel.id]
+            return await ctx.send("❌ تم إلغاء اللعبة: يجب توفر لاعبين على الأقل.")
 
         active_players = list(game.players)
-        await ctx.send("🏁 **انتهى وقت التسجيل! جاري تجهيز الجولة الأولى وبدء صراع الحروف...**")
-        await asyncio.sleep(2)
+        await ctx.send("🏁 **بدأت المباراة!**")
 
-        # 🎯 2. حلقة الجولات الإقصائية
         round_num = 1
         while len(active_players) > 1:
             current_letter = random.choice(self.letters)
-            
-            round_embed = discord.Embed(
-                title=f"🏹 ريبلكا - الجولة {round_num} 🏹",
-                description=f"🔤 الحرف المختار لهذه الجولة هو: **[ {current_letter} ]**\n\nالبوت سيقوم الآن باختيار لاعبين عشوائيين للأقسام! جهزوا أنفسكم في الشات بسرعة!",
-                color=discord.Color.random()
-            )
-            await ctx.send(embed=round_embed)
-            await asyncio.sleep(3)
+            await ctx.send(f"🏹 **الجولة {round_num}** | الحرف المختار: **[{current_letter}]**")
+            await asyncio.sleep(2)
 
-            # توزيع الأقسام على اللاعبين المتواجدين
             for category in self.categories:
-                if len(active_players) <= 1:
-                    break 
-
-                target_player = random.choice(active_players)
-                await ctx.send(f"🚨 {target_player.mention} الدور عليك! أرسل في الشات **{category}** يبدأ بحرف **({current_letter})** عجلللل! (معاك 15 ثانية)")
+                if len(active_players) <= 1: break
+                
+                # خلط اللاعبين لاختيار دور جديد عشوائي لكل قسم
+                random.shuffle(active_players)
+                target_player = active_players[0]
+                
+                await ctx.send(f"🚨 {target_player.mention} الدور عليك! أرسل **{category}** يبدأ بحرف **({current_letter})** (معاك 15 ثانية)")
 
                 def check_reply(m):
-                    # التأكد من الغرفة واللاعب أولاً
-                    if m.author.id != target_player.id or m.channel.id != ctx.channel.id:
-                        return False
-                    
-                    # تجهيز الكلمة والحرف للفحص المرن مرونة الهمزات والألف
-                    content = m.content.strip()
-                    if not content:
-                        return False
-                    
-                    first_char = content[0]
-                    target_char = current_letter
-                    
-                    # نظام فحص ذكي للألف والهمزات (لو الحرف أ يطابق ا أو إ)
-                    alif_variants = ["أ", "ا", "إ", "آ"]
-                    if target_char in alif_variants and first_char in alif_variants:
-                        return True
-                        
-                    return first_char == target_char
+                    return m.author.id == target_player.id and m.channel.id == ctx.channel.id
 
                 try:
-                    player_msg = await self.bot.wait_for("message", check=check_reply, timeout=15.0)
-                    await ctx.send(f"✅ إجابة مقبولة وسريعة! **{player_msg.content}**.. نجا {target_player.mention} من المقصلة.")
-                    await asyncio.sleep(1.5)
+                    msg = await self.bot.wait_for("message", check=check_reply, timeout=15.0)
+                    content = msg.content.strip()
+                    
+                    # فحص ذكي للألف والهمزات
+                    alif = ["أ", "ا", "إ", "آ"]
+                    is_correct = (content.startswith(current_letter)) or (current_letter in alif and content[0] in alif)
+
+                    if is_correct:
+                        await ctx.send(f"✅ صح! نجا {target_player.mention}.")
+                    else:
+                        await ctx.send(f"❌ الكلمة خطأ! تم إقصاء {target_player.mention} من اللعبة.")
+                        active_players.remove(target_player)
+                
                 except asyncio.TimeoutError:
+                    await ctx.send(f"💥 انتهى الوقت! تم إقصاء {target_player.mention} لعدم الرد.")
                     active_players.remove(target_player)
-                    await ctx.send(f"💥 **بمبببب!** انتهى الوقت ولم يرسل الكلمة الصحيحة! تم إقصاء {target_player.mention} 🪓")
-                    await asyncio.sleep(2)
-                    if len(active_players) <= 1:
-                        break
-
+                
+                await asyncio.sleep(1)
+            
             round_num += 1
-            if len(active_players) > 1:
-                await ctx.send(f"🔄 انتهت الجولة! اللاعبين الصامدين المتبقين: `{len(active_players)}`. جاري الانتقال للحرف التالي...")
-                await asyncio.sleep(3)
 
-        # 🏆 3. إعلان الفائز النهائي بالبطولة
         if len(active_players) == 1:
             winner = active_players[0]
-            win_embed = discord.Embed(
-                title="👑 بطل ريبلكا الأسطوري! 👑",
-                description=f"🏆 ألف مبروك الفوز الأسطوري للاعب: {winner.mention}\nصمد ضد الجميع وثبت ذكاءه وسرعته في ريبلكا الحروف!",
-                color=discord.Color.gold()
-            )
-            win_embed.set_thumbnail(url=winner.display_avatar.url)
-            await ctx.send(embed=win_embed)
-
-        if ctx.channel.id in self.active_games:
-            del self.active_games[ctx.channel.id]
+            await ctx.send(f"👑 **مبروك! الفائز بالبطولة هو {winner.mention}** 👑")
+        
+        del self.active_games[ctx.channel.id]
 
 async def setup(bot):
     await bot.add_cog(ReplikaCog(bot))
-    print("✅ تم تحميل كوج لعبة ريبلكا الحروف الإقصائية بنجاح!")
