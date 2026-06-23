@@ -13,12 +13,12 @@ class ReplikaCog(commands.Cog):
     def __init__(self, bot):
         self.bot = bot
         self.active_games = {}
-        # قائمة الحروف المتاحة للعب (تم استبعاد الحروف الصعبة جداً لمتعة اللعب)
+        # قائمة الحروف المتاحة للعب
         self.letters = ["أ", "ب", "ت", "ج", "ح", "خ", "د", "ر", "ز", "س", "ش", "ص", "ط", "ع", "غ", "ف", "ق", "ك", "ل", "م", "ن", "هـ", "و", "ي"]
         # الأقسام المطلوبة
         self.categories = ["اسم 🧑", "حيوان 🦁", "نبات 🌿", "جماد 📦", "دولة 🗺️"]
 
-    @commands.command(name="ريبلكا", aliases=["replika", "ريبلكا"])
+    @commands.command(name="ريبلكا", aliases=["replika"])
     async def start_replika(self, ctx):
         if ctx.channel.id in self.active_games:
             return await ctx.send("❌ توجد مباراة ريبلكا قائمة بالفعل في هذا الروم!")
@@ -77,24 +77,36 @@ class ReplikaCog(commands.Cog):
             # توزيع الأقسام على اللاعبين المتواجدين
             for category in self.categories:
                 if len(active_players) <= 1:
-                    break # إذا بقي لاعب واحد أثناء الجولة ينتهي كل شيء فوراً
+                    break 
 
-                # اختيار ضحية عشوائية للقسم الحالي
                 target_player = random.choice(active_players)
-                
                 await ctx.send(f"🚨 {target_player.mention} الدور عليك! أرسل في الشات **{category}** يبدأ بحرف **({current_letter})** عجلللل! (معاك 15 ثانية)")
 
                 def check_reply(m):
-                    # التحقق أن الرسالة من اللاعب المستهدف، في نفس الروم، وتبدأ بالحرف المطلوب فعلاً
-                    return m.author.id == target_player.id and m.channel.id == ctx.channel.id and m.content.strip().startswith(current_letter)
+                    # التأكد من الغرفة واللاعب أولاً
+                    if m.author.id != target_player.id or m.channel.id != ctx.channel.id:
+                        return False
+                    
+                    # تجهيز الكلمة والحرف للفحص المرن مرونة الهمزات والألف
+                    content = m.content.strip()
+                    if not content:
+                        return False
+                    
+                    first_char = content[0]
+                    target_char = current_letter
+                    
+                    # نظام فحص ذكي للألف والهمزات (لو الحرف أ يطابق ا أو إ)
+                    alif_variants = ["أ", "ا", "إ", "آ"]
+                    if target_char in alif_variants and first_char in alif_variants:
+                        return True
+                        
+                    return first_char == target_char
 
                 try:
-                    # انتظار إجابة اللاعب خلال 15 ثانية
                     player_msg = await self.bot.wait_for("message", check=check_reply, timeout=15.0)
                     await ctx.send(f"✅ إجابة مقبولة وسريعة! **{player_msg.content}**.. نجا {target_player.mention} من المقصلة.")
                     await asyncio.sleep(1.5)
                 except asyncio.TimeoutError:
-                    # في حال انتهاء الوقت يتم إقصاؤه فوراً
                     active_players.remove(target_player)
                     await ctx.send(f"💥 **بمبببب!** انتهى الوقت ولم يرسل الكلمة الصحيحة! تم إقصاء {target_player.mention} 🪓")
                     await asyncio.sleep(2)
@@ -117,7 +129,6 @@ class ReplikaCog(commands.Cog):
             win_embed.set_thumbnail(url=winner.display_avatar.url)
             await ctx.send(embed=win_embed)
 
-        # تنظيف الغرفة بعد انتهاء المباراة كاملة
         if ctx.channel.id in self.active_games:
             del self.active_games[ctx.channel.id]
 
