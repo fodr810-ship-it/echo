@@ -50,7 +50,7 @@ class fastgame(commands.Cog):
             {"image": "https://files.catbox.moe/nf3wzx.png", "answer": "قبيلة"},
             {"image": "https://files.catbox.moe/9ywpzf.png", "answer": "حياة"},
             {"image": "https://files.catbox.moe/v83tf0.png", "answer": "فائز"},
-            {"image": "https://files.catbox.moe/1xlmaf.png", "answer": "اقنصاد"},
+            {"image": "https://files.catbox.moe/1xlmaf.png", "answer": "اقتصاد"},
             {"image": "https://files.catbox.moe/gmibir.png", "answer": "دولة"},
             {"image": "https://files.catbox.moe/4sz7qy.png", "answer": "قرطاس"},
             {"image": "https://files.catbox.moe/41cnc0.png", "answer": "سيف"},
