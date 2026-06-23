@@ -3,7 +3,7 @@ from discord.ext import commands
 import asyncio
 from typing import List, Optional
 
-# 1. كلاس لوحة اللعب الحسابية (المعدل ليدعم تبديل الأدوار)
+# 1. كلاس لوحة اللعب الحسابية
 class TicTacToeView(discord.ui.View):
     X = 1
     O = -1
@@ -14,8 +14,9 @@ class TicTacToeView(discord.ui.View):
         self.player_x = player_x  # لاعب X
         self.player_o = player_o  # لاعب O
         
-        # 🔄 إذا تم تحديد لاعب للبدء (مثل جولة الإعادة) نختاره، وإلا الافتراضي هو player_x
-        self.current_player = starter if starter else player_x  
+        # 🔄 تحديد من سيبدأ الجولة الحالية (الافتراضي للجولة الأولى هو player_x)
+        self.initial_starter = starter if starter else player_x
+        self.current_player = self.initial_starter
 
         # بناء مصفوفة اللوحة 3x3 حسابياً
         self.board: List[List[int]] = [
@@ -29,7 +30,7 @@ class TicTacToeView(discord.ui.View):
             for y in range(3):
                 self.add_item(TicTacToeButton(x, y))
 
-    # دالة التحقق من الفوز (أفقي، عمودي، قطري)
+    # دالة التحقق من الفوز
     def check_board_winner(self):
         # فحص الصفوف الأفقية
         for row in self.board:
@@ -78,7 +79,7 @@ class TicTacToeButton(discord.ui.Button['TicTacToeView']):
             await interaction.response.send_message('❌ ليس دورك الآن للعب!', ephemeral=True)
             return
 
-        # تعيين العلامة بناءً على دور اللاعب الحالي
+        # تعيين العلامة وتغيير الدور للاعب الآخر
         if view.current_player == view.player_x:
             self.label = '❌'
             self.style = discord.ButtonStyle.danger
@@ -108,12 +109,10 @@ class TicTacToeButton(discord.ui.Button['TicTacToeView']):
                     child.disabled = True
                 view.stop()
             elif winner == view.Tie:
-                # 🔄 في حال التعادل: نعكس البادئ في جولة الإعادة القادمة
-                # إذا كان اللي بدأ الجيم الحالي هو player_x، نـخـلّي البادئ القادم هو player_o
-                # تلميذاً لفكرتك، قمنا بتبديل الأدوار هنا بالظبط 👇
-                next_starter = view.player_o if view.current_player == view.player_x else view.player_x
+                # 🔄 لتطبيق فكرتك بدقة: الخصم الذي لم يبدأ الجولة الحالية هو من سيبدأ جولة الإعادة
+                next_starter = view.player_o if view.initial_starter == view.player_x else view.player_x
                 
-                content = '🤝 **تعادل!** جاري بدء مباراة الإعادة تلقائياً خلال ثانيتين...'
+                content = '🤝 **تعادل!** جاري بدء مباراة الإعادة تلقائياً وعكس دور البداية...'
                 for child in view.children:
                     child.disabled = True
                 view.stop()
@@ -121,13 +120,12 @@ class TicTacToeButton(discord.ui.Button['TicTacToeView']):
                 await interaction.response.edit_message(content=content, view=view)
                 await asyncio.sleep(2)
                 
-                # بدء الجيم الجديد تلقائياً مع تمرير البادئ الجديد (الخصم الثاني)
+                # إنشاء اللوحة الجديدة وتمرير اللاعب الثاني كبادئ
                 new_view = TicTacToeView(view.player_x, view.player_o, starter=next_starter)
                 
-                # تحديد العلامة التي سيبدأ بها الجيم القادم في النص للتوضيح
                 starter_sign = "❌" if next_starter == view.player_x else "⭕"
                 await interaction.channel.send(
-                    content=f"🔄 **مباراة الإعادة! (تم تبديل دور البداية للعدالة)**\nالدور الحالي والافتتاحي: {next_starter.mention} ({starter_sign})", 
+                    content=f"🔄 **مباراة الإعادة! (تم تبديل دور البداية لإنصاف اللاعب الثاني)**\nالدور الافتتاحي الآن: {next_starter.mention} ({starter_sign})", 
                     view=new_view
                 )
                 return
@@ -135,7 +133,7 @@ class TicTacToeButton(discord.ui.Button['TicTacToeView']):
         await interaction.response.edit_message(content=content, view=view)
 
 
-# 3. كلاس زر الانضمام والمشاركة (البداية)
+# 3. كلاس زر الانضمام والمشاركة
 class JoinGameView(discord.ui.View):
     def __init__(self, p1):
         super().__init__(timeout=15.0)
@@ -151,7 +149,6 @@ class JoinGameView(discord.ui.View):
         self.is_started = True
         self.stop()
         
-        # تحويل الرسالة فوراً إلى لوحة اللعب الحسابية بدون أي تأخير
         game_view = TicTacToeView(self.p1, interaction.user)
         await interaction.response.edit_message(
             content=f"🏁 **بدأت المباراة!**\n{self.p1.mention} (❌)  **Vs** {interaction.user.mention} (⭕)\n\nالدور الحالي: {self.p1.mention} (❌)", 
@@ -163,7 +160,7 @@ class JoinGameView(discord.ui.View):
             self.stop()
 
 
-# 4. كلاس الكوج الأساسي للبوت
+# 4. كلاس الكوج الأساسي لبوت الـ XO
 class XOCog(commands.Cog):
     def __init__(self, bot: commands.Bot):
         self.bot = bot
@@ -175,7 +172,6 @@ class XOCog(commands.Cog):
         
         await join_view.wait()
         
-        # إذا انتهى الوقت ولم يضغط أحد، يتم إلغاء الأزرار واللعبة
         if not join_view.is_started:
             try:
                 await msg.edit(content="❌ انتهى الوقت (15 ثانية) ولم ينضم أحد للمشاركة في اللعبة.", view=None)
