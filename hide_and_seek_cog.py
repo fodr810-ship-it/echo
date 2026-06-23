@@ -1,7 +1,6 @@
 import discord
 from discord.ext import commands
 import random
-import asyncio
 
 class HideAndSeekView(discord.ui.View):
     def __init__(self, bot_choice, ctx):
@@ -9,6 +8,7 @@ class HideAndSeekView(discord.ui.View):
         self.bot_choice = bot_choice
         self.ctx = ctx
         self.winner = None
+        self.message = None  # سيتم ربط الرسالة هنا لاحقاً
 
     async def check_choice(self, interaction: discord.Interaction, choice: str):
         # التحقق إذا انتهت اللعبة مسبقاً
@@ -18,15 +18,15 @@ class HideAndSeekView(discord.ui.View):
 
         if choice == self.bot_choice:
             self.winner = interaction.user
-            self.stop() # إيقاف الأزرار
+            self.stop()  # إيقاف الأزرار
             
-            # تعديل الرسالة لإظهار الفائز وتعطيل الأزرار
+            # تعديل الأزرار: تعطيلها وتلوين زر الفوز بالأخضر
             for child in self.children:
                 child.disabled = True
                 if child.label == choice:
-                    child.style = discord.ButtonStyle.success # زر الفوز أخضر
+                    child.style = discord.ButtonStyle.success  # أخضر
                 else:
-                    child.style = discord.ButtonStyle.secondary
+                    child.style = discord.ButtonStyle.secondary  # رمادي
 
             await interaction.response.edit_message(view=self)
             await self.ctx.send(f"🎉 **كفوووو!** {interaction.user.mention} لقى البوت! البوت كان متخبي في: **{self.bot_choice}** 🎯")
@@ -54,6 +54,9 @@ class HideAndSeekView(discord.ui.View):
             for child in self.children:
                 child.disabled = True
             try:
+                # إيقاف الأزرار على الرسالة الأصلية عند انتهاء الوقت
+                if self.message:
+                    await self.message.edit(view=self)
                 await self.ctx.send(f"⏰ **انتهى الوقت!** البوت فاز عليكم وما أحد لقى مكانه هههههه! كان متخبي في: **{self.bot_choice}** 🏆")
             except:
                 pass
@@ -62,9 +65,10 @@ class HideAndSeekCog(commands.Cog):
     def __init__(self, bot):
         self.bot = bot
 
+    # 🎮 الأمر العادي بالـ Prefix المعتاد حقك
     @commands.command(name="غميضة", aliases=["غميضه", "hide"])
     async def hide_game(self, ctx):
-        """يبدأ لعبة غميضة في السيرفر"""
+        """يبدأ لعبة غميضة في السيرفر عبر الشات"""
         places = ["خلف الشجرة 🌳", "تحت السرير 🛏️", "داخل الخزانة 🚪", "وراء الستارة 🪟"]
         bot_choice = random.choice(places)
 
@@ -76,13 +80,12 @@ class HideAndSeekCog(commands.Cog):
         embed.set_footer(text="أول لاعب يضغط على المكان الصح هو الفائز!")
 
         view = HideAndSeekView(bot_choice, ctx)
-        # إرسال الرسالة مع الأزرار
+        # إرسال الرسالة مع الأزرار التفاعلية
         msg = await ctx.send(embed=embed, view=view)
         
-        # ربط الـ view بالرسالة عشان التايم أوت يعدلها لو انتهى الوقت
+        # ربط الـ view بالرسالة للتعامل مع التايم أوت بشكل صحيح
         view.message = msg
 
 async def setup(bot):
-    await bot.load_extension("hide_and_seek_cog") # خطوة اختيارية للتأكيد
     await bot.add_cog(HideAndSeekCog(bot))
-    print("✅ تم تحميل كوج لعبة الغميضة بنجاح!")
+    print("✅ تم تحميل كوج لعبة الغميضة العادية بنجاح!")
