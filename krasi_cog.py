@@ -3,20 +3,23 @@ from discord.ext import commands
 import asyncio
 import random
 
-# --- الكلاسات الخاصة بالأزرار والتفاعل ---
+# --- كلاس زر الانضمام (تم التعديل ليصبح شفافاً والرسالة خاصة) ---
 class JoinView(discord.ui.View):
     def __init__(self):
         super().__init__(timeout=30.0)
         self.players = []
 
-    @discord.ui.button(label="🎮 انضمام للعبة", style=discord.ButtonStyle.blurple)
+    # تغيير الستايل إلى secondary ليظهر باللون الرمادي الشفاف
+    @discord.ui.button(label="🎮 انضمام للعبة", style=discord.ButtonStyle.secondary)
     async def join(self, interaction: discord.Interaction, button: discord.ui.Button):
         if interaction.user in self.players:
             await interaction.response.send_message("أنت مسجل بالفعل في القائمة! 🏎️", ephemeral=True)
         else:
             self.players.append(interaction.user)
-            await interaction.response.send_message(f"✅ {interaction.user.mention} انضم للعبة الكراسي!", ephemeral=False)
+            # تغيير ephemeral إلى True لتصبح الرسالة خاصة باللاعب فقط
+            await interaction.response.send_message("✅ انضممت للعبة الكراسي بنجاح! استعد 🪑", ephemeral=True)
 
+# --- كلاس زر الكرسي السريع (بقي كما هو باللون الأخضر للحماس) ---
 class ChairButton(discord.ui.View):
     def __init__(self, players, max_chairs):
         super().__init__(timeout=15.0)
@@ -46,7 +49,7 @@ class ChairButton(discord.ui.View):
 class KrasiCog(commands.Cog):
     def __init__(self, bot):
         self.bot = bot
-        self.active_games = {} # مصفوفة الألعاب النشطة خاصة بالـ Cog
+        self.active_games = {}
 
     @commands.command(name="كراسي")
     async def musical_chairs(self, ctx):
@@ -100,6 +103,6 @@ class KrasiCog(commands.Cog):
         await ctx.send(f"\n🏆🎉 **مبرووووووك! الفائز بلقب ملك الكراسي هو: {winner.mention}** 👑")
         self.active_games.pop(ctx.channel.id, None)
 
-# --- الدالة السحرية التي كانت ناقصة وتسببت في الخطأ ---
+# دالة الربط بالبوت الأساسي
 async def setup(bot):
     await bot.add_cog(KrasiCog(bot))
