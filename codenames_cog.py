@@ -2,12 +2,7 @@ import discord
 from discord.ext import commands
 import random
 
-# إعداد البوت
-intents = discord.Intents.default()
-intents.message_content = True
-bot = commands.Bot(command_prefix='!', intents=intents)
-
-# قائمة كلمات تجريبية (تحتاج توسعها لـ 100+ كلمة)
+# قائمة كلمات تجريبية
 WORD_LIST = [
     "قمر", "شمس", "سيارة", "طيارة", "مفتاح", "باب", "بحر", "رمل", "جبل", "ثلج",
     "نار", "ماء", "سيف", "درع", "حصان", "فارس", "ملك", "قلعة", "ذهب", "فضة",
@@ -24,29 +19,25 @@ class CodenamesBoard(discord.ui.View):
             self.add_item(button)
 
     async def button_callback(self, interaction: discord.Interaction):
-        # هنا يتم التحقق من لون الكلمة (أحمر، أزرق، محايد، أو قاتل)
-        # وتحديث لون الزر بعد الضغط عليه
-        await interaction.response.send_message(f"ضغطت على الكلمة!", ephemeral=True)
+        # هنا يتم التحقق من لون الكلمة
+        await interaction.response.send_message(f"ضغطت على الكلمة: {interaction.data['custom_id'] or interaction.data['component_type']}", ephemeral=True)
 
-@bot.command(name="start_codenames")
-async def start_codenames(ctx):
-    if len(WORD_LIST) < 25:
-        await ctx.send("تحتاج على الأقل 25 كلمة في القائمة!")
-        return
-    
-    # اختيار 25 كلمة عشوائية للوحة
-    game_words = random.sample(WORD_LIST, 25)
-    
-    # هنا يتم تحديد الألوان وتخزينها (الخريطة التي ترسل للقادة فقط)
-    # ...
+class Codenames(commands.Cog):
+    def __init__(self, bot):
+        self.bot = bot
 
-    view = CodenamesBoard(game_words)
-    await ctx.send("بدأت لعبة كود نيمز! 🕵️‍♂️", view=view)
+    @commands.command(name="start_codenames")
+    async def start_codenames(self, ctx):
+        if len(WORD_LIST) < 25:
+            await ctx.send("تحتاج على الأقل 25 كلمة في القائمة!")
+            return
+        
+        # اختيار 25 كلمة عشوائية
+        game_words = random.sample(WORD_LIST, 25)
+        
+        view = CodenamesBoard(game_words)
+        await ctx.send("بدأت لعبة كود نيمز! 🕵️‍♂️", view=view)
 
-@bot.event
-async def on_ready():
-    print(f'Logged in as {bot.user} (ID: {bot.user.id})')
-    print('------')
-
-# شغل البوت باستخدام التوكن الخاص فيك
-# bot.run('YOUR_BOT_TOKEN_HERE')
+# دالة setup المطلوبة ليتمكن البوت من تحميل الملف كـ Cog
+async def setup(bot):
+    await bot.add_cog(Codenames(bot))
