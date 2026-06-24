@@ -11,12 +11,10 @@ class CodenamesGame(commands.Cog):
     async def start_codenames(self, ctx):
         self.games[ctx.channel.id] = {
             "players": [], "turn": "blue", "status": "playing",
-            "words": ["قمر", "شمس", "سيارة", "طيارة", "مفتاح", "باب", "بحر", "رمل", "جبل", "ثلج",
-    "نار", "ماء", "سيف", "درع", "حصان", "فارس", "ملك", "قلعة", "ذهب", "فضة",
-    "شجرة", "وردة", "عصفور", "نسر", "أسد"], "colors": [], "blue_score": 0, "red_score": 0,
+            "words": [], "colors": [], "blue_score": 0, "red_score": 0,
             "blue_team": [], "red_team": [], "blue_leader": None, "red_leader": None
         }
-        await ctx.send("لعبة كود نيمز! بانتظار 4 لاعبين:", view=JoinView(self))
+        await ctx.send("لعبة كود نيمز! بانتظار 4 لاعبين للانضمام:", view=JoinView(self))
 
 class JoinView(discord.ui.View):
     def __init__(self, cog):
@@ -39,24 +37,21 @@ class JoinView(discord.ui.View):
         game["red_team"] = [game["players"][2], game["players"][3]]
         game["blue_leader"], game["red_leader"] = game["players"][0], game["players"][2]
         
-        game["words"] = random.sample(["قمر", "شمس", "سيارة", "طيارة", "مفتاح", "باب", "بحر", "رمل", "جبل", "ثلج", "نار", "ماء", "سيف", "درع", "حصان", "فارس", "ملك", "قلعة", "ذهب", "فضة", "شجرة", "وردة", "عصفور", "نسر", "أسد"], 25)
+        words = ["قمر", "شمس", "سيارة", "طيارة", "مفتاح", "باب", "بحر", "رمل", "جبل", "ثلج", "نار", "ماء", "سيف", "درع", "حصان", "فارس", "ملك", "قلعة", "ذهب", "فضة", "شجرة", "وردة", "عصفور", "نسر", "أسد"]
+        game["words"] = random.sample(words, 25)
         game["colors"] = ["blue"]*11 + ["red"]*11 + ["black"]*3
         random.shuffle(game["colors"])
 
-        # رسائل القادة الخاصة
         for leader in [game["blue_leader"], game["red_leader"]]:
             team = "الأزرق" if leader == game["blue_leader"] else "الأحمر"
-            words = [game["words"][i] for i, c in enumerate(game["colors"]) if c == ("blue" if team == "الأزرق" else "red")]
-            await leader.send(f"أنت قائد الفريق {team}. كلماتك: {words}\nاستخدم زر 'تقديم تلميح' في هذه الرسالة.")
-            await leader.send(view=HintView(self.cog, interaction.channel.id))
+            await leader.send(f"أنت قائد الفريق {team}. كلماتك: {[game['words'][i] for i, c in enumerate(game['colors']) if c == ('blue' if team == 'الأزرق' else 'red')]}")
+            await leader.send("استخدم هذا الزر لتقديم التلميح:", view=HintView(self.cog, interaction.channel.id))
 
-        # رسائل الأعضاء الخاصة
         for member in game["players"]:
             if member not in [game["blue_leader"], game["red_leader"]]:
-                team = "الأزرق" if member in game["blue_team"] else "الأحمر"
-                await member.send(f"أنت عضو في الفريق {team}. انتظر دورك والعب بذكاء!")
+                await member.send(f"أنت في الفريق {'الأزرق' if member in game['blue_team'] else 'الأحمر'}. انتظر التلميح في الروم العام!")
         
-        await interaction.channel.send("بدأت اللعبة! القادة يقدمون تلميحاتهم.", view=GameBoardView(self.cog, interaction.channel.id))
+        await interaction.channel.send("بدأت اللعبة! الدور الآن للفريق الأزرق.", view=GameBoardView(self.cog, interaction.channel.id))
 
 class HintView(discord.ui.View):
     def __init__(self, cog, cid):
@@ -72,28 +67,22 @@ class HintModal(discord.ui.Modal, title='تلميح القائد'):
     def __init__(self, c, cid): super().__init__(); self.c, self.cid = c, cid
     async def on_submit(self, i):
         await i.client.get_channel(self.cid).send(f"📢 **تلميح القائد:** {self.hint.value} (عدد الكلمات: {self.count.value})")
-        await i.response.send_message("تم إرسال التلميح للروم العام!", ephemeral=True)
+        await i.response.send_message("تم إرسال التلميح!", ephemeral=True)
 
 class GameBoardView(discord.ui.View):
     def __init__(self, cog, cid):
-        # إضافة timeout=None لضمان عدم اختفاء الأزرار
-        super().__init__(timeout=None) 
-        self.cog = cog
-        self.cid = cid
-        game = cog.games[cid]
+        super().__init__(timeout=None)
+        self.cog, self.cid = cog, cid
         for i in range(25):
-            # التأكد من إرسال كل المعطيات المطلوبة للزر
-            button = WordButton(i, game["words"][i], cog, cid)
-            self.add_item(button)
+            self.add_item(WordButton(i, cog.games[cid]["words"][i], cog, cid))
 
 class WordButton(discord.ui.Button):
     def __init__(self, idx, lbl, cog, cid):
-        super().__init__(label=lbl, style=discord.ButtonStyle.secondary)
+        super().__init__(label=lbl, style=discord.ButtonStyle.secondary, custom_id=f"btn_{cid}_{idx}")
         self.idx, self.cog, self.cid = idx, lbl, cog, cid
 
     async def callback(self, i: discord.Interaction):
         g = self.cog.games[self.cid]
-        # التحقق من الدور
         if (g["turn"] == "blue" and i.user not in g["blue_team"]) or \
            (g["turn"] == "red" and i.user not in g["red_team"]):
             return await i.response.send_message("ليس دور فريقك!", ephemeral=True)
@@ -101,7 +90,7 @@ class WordButton(discord.ui.Button):
         color = g["colors"][self.idx]
         self.disabled = True
         if color == "black":
-            await i.response.edit_message(content=f"💀 خسارة الفريق {g['turn'].upper()} بسبب الكلمة السوداء!", view=None)
+            await i.response.edit_message(content=f"💀 خسارة الفريق {g['turn'].upper()}!", view=None)
             return
         
         self.style = discord.ButtonStyle.primary if color == "blue" else discord.ButtonStyle.danger
