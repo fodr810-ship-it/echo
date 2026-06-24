@@ -11,7 +11,9 @@ class CodenamesGame(commands.Cog):
     async def start_codenames(self, ctx):
         self.games[ctx.channel.id] = {
             "players": [], "turn": "blue", "status": "playing",
-            "words": [], "colors": [], "blue_score": 0, "red_score": 0,
+            "words": ["قمر", "شمس", "سيارة", "طيارة", "مفتاح", "باب", "بحر", "رمل", "جبل", "ثلج",
+    "نار", "ماء", "سيف", "درع", "حصان", "فارس", "ملك", "قلعة", "ذهب", "فضة",
+    "شجرة", "وردة", "عصفور", "نسر", "أسد"], "colors": [], "blue_score": 0, "red_score": 0,
             "blue_team": [], "red_team": [], "blue_leader": None, "red_leader": None
         }
         await ctx.send("لعبة كود نيمز! بانتظار 4 لاعبين:", view=JoinView(self))
