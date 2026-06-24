@@ -7,7 +7,7 @@ from collections import Counter
 # --- 1. كلاس قائمة التسجيل والانضمام ---
 class MafiaJoinView(discord.ui.View):
     def __init__(self):
-        super().__init__(timeout=45.0)
+        super().__init__(timeout=30.0)
         self.players = []
 
     @discord.ui.button(label="🕵️‍♂️ انضمام للعبة", style=discord.ButtonStyle.secondary)
@@ -22,7 +22,7 @@ class MafiaJoinView(discord.ui.View):
         # تحديث الإمبيد بالعداد الجديد
         embed = discord.Embed(
             title="🕵️‍♂️ شبكة المافيا - ليلة غامضة",
-            description="المدينة مهددة! اضغط على الزر بالأسفل للانضمام إلى اللعبة.\n\n⌛ **وقت التسجيل:** 45 ثانية.\n⚠️ **الحد الأدنى للعب:** 4 لاعبين (مافيا، دكتور، شايب، ومواطن).",
+            description="المدينة مهددة! اضغط على الزر بالأسفل للانضمام إلى اللعبة.\n\n⌛ **وقت التسجيل:** 30 ثانية.\n⚠️ **الحد الأدنى للعب:** 4 لاعبين (مافيا، دكتور، شايب، ومواطن).",
             color=0x2b2d31
         )
         embed.add_field(name="👥 عدد اللاعبين الحالي", value=f"📡 **{len(self.players)}** لاعبين", inline=False)
@@ -71,7 +71,7 @@ class NightActionSelect(discord.ui.Select):
 # --- 3. لوحة التحكم الليلية الزر العام ---
 class NightControlView(discord.ui.View):
     def __init__(self, cog_instance, channel_id):
-        super().__init__(timeout=40.0)
+        super().__init__(timeout=30.0)
         self.cog_instance = cog_instance
         self.channel_id = channel_id
 

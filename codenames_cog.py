@@ -76,9 +76,15 @@ class HintModal(discord.ui.Modal, title='تلميح القائد'):
 
 class GameBoardView(discord.ui.View):
     def __init__(self, cog, cid):
-        super().__init__(timeout=None)
-        self.cog, self.cid = cog, cid
-        for i in range(25): self.add_item(WordButton(i, cog.games[cid]["words"][i], cog, cid))
+        # إضافة timeout=None لضمان عدم اختفاء الأزرار
+        super().__init__(timeout=None) 
+        self.cog = cog
+        self.cid = cid
+        game = cog.games[cid]
+        for i in range(25):
+            # التأكد من إرسال كل المعطيات المطلوبة للزر
+            button = WordButton(i, game["words"][i], cog, cid)
+            self.add_item(button)
 
 class WordButton(discord.ui.Button):
     def __init__(self, idx, lbl, cog, cid):
