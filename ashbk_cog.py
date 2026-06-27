@@ -12,7 +12,7 @@ class ashbkgame(commands.Cog):
         self.scores_file = "ashbk_scores.json"
         self.scores = self.load_scores()
         self.questions = [
-            {"image": "blob:null/05257285-df4e-425b-b432-fc43a99cbe71", "answer": "نجران"},
+            {"image": "blob:null/05257285-df4e-425b-b432-fc43a99cbe71", "answer": "دراسة"},
             {"image": "", "answer": ""},
             {"image": "", "answer": ""},
             {"image": "", "answer": ""},
@@ -87,7 +87,7 @@ class ashbkgame(commands.Cog):
     async def on_message(self, message):
         if message.author.bot:
             return
-        if message.content.strip() == "اسرع":
+        if message.content.strip() == "اشبك":
             await self.run_game(message.channel)
 
     async def run_game(self, channel):
