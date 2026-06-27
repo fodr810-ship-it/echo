@@ -79,7 +79,7 @@ class ashbkgame(commands.Cog):
         with open(self.scores_file, "w") as f:
             json.dump(self.scores, f)
 
-    @commands.command(name="اسرع")
+    @commands.command(name="اشبك")
     async def start_game_cmd(self, ctx):
         await self.run_game(ctx.channel)
 
