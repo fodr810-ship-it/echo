@@ -1,8 +1,9 @@
 import discord
 from discord.ext import commands
 import random
+import asyncio
 
-# قائمة كلمات مقترحة (يمكنك تعديلها وإضافة المزيد)
+# قائمة كلمات مقترحة
 WORD_BANK = [
     "أسد", "قمر", "شمس", "بحر", "جبل", "سيف", "درع", "حصان", "صقر", "نار",
     "جليد", "رياح", "عاصفة", "نجم", "كوكب", "مجرة", "فضاء", "سفينة", "طائرة", "سيارة",
@@ -49,7 +50,6 @@ class ControlView(discord.ui.View):
 
     @discord.ui.button(label="تقديم تلميح", style=discord.ButtonStyle.success, custom_id="btn_hint")
     async def hint_button(self, interaction: discord.Interaction, button: discord.ui.Button):
-        # التحقق من أن الضغاط هو قائد الفريق صاحب الدور
         is_red_turn = self.game.current_turn == "red"
         active_leader = self.game.red_leader if is_red_turn else self.game.blue_leader
         
@@ -71,12 +71,17 @@ class BoardButton(discord.ui.Button):
         self.game = game
 
     async def callback(self, interaction: discord.Interaction):
-        # 1. التحقق من أن المستخدم ليس قائداً
+        # 1. منع تداخل الضغطات (تأمين الزر إذا كان هناك شخص آخر يضغط في نفس اللحظة)
+        if self.game.is_processing:
+            await interaction.response.send_message("⏳ يتم الآن معالجة ضغطة أخرى، الرجاء الانتظار للحظة...", ephemeral=True)
+            return
+
+        # 2. التحقق من أن المستخدم ليس قائداً
         if interaction.user in [self.game.red_leader, self.game.blue_leader]:
             await interaction.response.send_message("❌ القادة لا يمكنهم اختيار الكلمات! الأعضاء فقط من يضغطون الأزرار.", ephemeral=True)
             return
 
-        # 2. التحقق من أن المستخدم عضو في الفريق صاحب الدور
+        # 3. التحقق من أن المستخدم عضو في الفريق صاحب الدور
         is_red_turn = self.game.current_turn == "red"
         active_members = self.game.red_members if is_red_turn else self.game.blue_members
         
@@ -84,7 +89,7 @@ class BoardButton(discord.ui.Button):
             await interaction.response.send_message("❌ ليس دور فريقك أو أنك لست عضواً في هذا الفريق!", ephemeral=True)
             return
 
-        # 3. التحقق من وجود تلميح ووجود محاولات متبقية
+        # 4. التحقق من وجود تلميح ووجود محاولات متبقية
         if not self.game.hint_given:
             await interaction.response.send_message("❌ القائد لم يعطِ تلميحاً بعد!", ephemeral=True)
             return
@@ -93,48 +98,56 @@ class BoardButton(discord.ui.Button):
             await interaction.response.send_message("❌ لقد استنفدتم عدد المحاولات المتاحة لهذا التلميح!", ephemeral=True)
             return
 
-        # كشف الزر
-        self.disabled = True
-        self.game.remaining_guesses -= 1
+        # تفعيل القفل لمنع اللخبطة
+        self.game.is_processing = True
+        
+        try:
+            # كشف الزر
+            self.disabled = True
+            self.game.remaining_guesses -= 1
 
-        if self.real_color == "red":
-            self.style = discord.ButtonStyle.danger
-            if is_red_turn:
-                self.game.red_score += 1
+            if self.real_color == "red":
+                self.style = discord.ButtonStyle.danger
+                if is_red_turn:
+                    self.game.red_score += 1
+                else:
+                    self.game.red_score += 1 
+            elif self.real_color == "blue":
+                self.style = discord.ButtonStyle.primary
+                if not is_red_turn:
+                    self.game.blue_score += 1
+                else:
+                    self.game.blue_score += 1 
             else:
-                self.game.red_score += 1 # الفريق الأزرق ضغط أحمر بالخطأ
-        elif self.real_color == "blue":
-            self.style = discord.ButtonStyle.primary
-            if not is_red_turn:
-                self.game.blue_score += 1
-            else:
-                self.game.blue_score += 1 # الفريق الأحمر ضغط أزرق بالخطأ
-        else:
-            self.style = discord.ButtonStyle.success # اللون الأسود (اخترت أخضر كـ لون مميز للموت أو يمكنك تركه رمادي غامق)
-            self.label = f"💀 {self.word}"
+                self.style = discord.ButtonStyle.success 
+                self.label = f"💀 {self.word}"
 
-        await interaction.response.edit_message(view=self.view)
+            await interaction.response.edit_message(view=self.view)
 
-        # منطق الفوز والخسارة وتغيير الدور
-        if self.real_color == "black":
-            loser = "🔴 الأحمر" if is_red_turn else "🔵 الأزرق"
-            winner = "🔵 الأزرق" if is_red_turn else "🔴 الأحمر"
-            await self.game.channel.send(f"💀 **كارثة!** قام فريق {loser} باختيار الكلمة السوداء!\n🏆 **الفريق الفائز هو {winner}!**")
-            await self.game.end_game()
-            return
+            # منطق الفوز والخسارة وتغيير الدور
+            if self.real_color == "black":
+                loser = "🔴 الأحمر" if is_red_turn else "🔵 الأزرق"
+                winner = "🔵 الأزرق" if is_red_turn else "🔴 الأحمر"
+                await self.game.channel.send(f"💀 **كارثة!** قام فريق {loser} باختيار الكلمة السوداء!\n🏆 **الفريق الفائز هو {winner}!**")
+                await self.game.end_game()
+                return
 
-        if self.game.red_score == 11:
-            await self.game.channel.send("🏆 **فاز الفريق الأحمر 🔴 بجميع كلماته!**")
-            await self.game.end_game()
-            return
-        elif self.game.blue_score == 11:
-            await self.game.channel.send("🏆 **فاز الفريق الأزرق 🔵 بجميع كلماته!**")
-            await self.game.end_game()
-            return
+            if self.game.red_score == 11:
+                await self.game.channel.send("🏆 **فاز الفريق الأحمر 🔴 بجميع كلماته!**")
+                await self.game.end_game()
+                return
+            elif self.game.blue_score == 11:
+                await self.game.channel.send("🏆 **فاز الفريق الأزرق 🔵 بجميع كلماته!**")
+                await self.game.end_game()
+                return
 
-        # تغيير الدور إذا ضغط لون الفريق الخصم أو انتهت المحاولات
-        if (is_red_turn and self.real_color != "red") or (not is_red_turn and self.real_color != "blue") or (self.game.remaining_guesses == 0):
-            await self.game.switch_turn()
+            # تغيير الدور إذا ضغط لون الفريق الخصم أو انتهت المحاولات
+            if (is_red_turn and self.real_color != "red") or (not is_red_turn and self.real_color != "blue") or (self.game.remaining_guesses == 0):
+                await self.game.switch_turn()
+        
+        finally:
+            # إزالة القفل بعد الانتهاء
+            self.game.is_processing = False
 
 class BoardView(discord.ui.View):
     def __init__(self, game):
@@ -163,6 +176,7 @@ class GameSession:
         self.hint_word = None
         self.remaining_guesses = 0
         self.hint_given = False
+        self.is_processing = False # قفل الأزرار لمنع التداخل
         
         self.board_msg = None
         self.control_msg = None
@@ -170,13 +184,11 @@ class GameSession:
 
     def generate_board(self):
         chosen_words = random.sample(WORD_BANK, 25)
-        # 11 أحمر، 11 أزرق، 3 أسود
         colors = ['red']*11 + ['blue']*11 + ['black']*3
         random.shuffle(colors)
         return dict(zip(chosen_words, colors))
 
     async def start(self):
-        # إرسال الكلمات في الخاص للقادة
         red_words = [w for w, c in self.words_dict.items() if c == "red"]
         blue_words = [w for w, c in self.words_dict.items() if c == "blue"]
         black_words = [w for w, c in self.words_dict.items() if c == "black"]
@@ -190,7 +202,6 @@ class GameSession:
         except discord.Forbidden:
             await self.channel.send("⚠️ تنبيه: أحد القادة أو كلاهما مقفل رسائل الخاص! اللعبة تتطلب فتح الخاص لرؤية الكلمات.")
 
-        # إشعار الأعضاء في الخاص
         for member in self.red_members:
             try:
                 await member.send("🔴 **أنت عضو عادي في الفريق الأحمر** 🔴\nانتظر تلميح قائدك واضغط على الأزرار الصحيحة في السيرفر!")
@@ -202,7 +213,6 @@ class GameSession:
             except discord.Forbidden:
                 pass
 
-        # إرسال رسالة البورد والتحكم
         turn_str = "🔴 الأحمر" if self.current_turn == "red" else "🔵 الأزرق"
         await self.channel.send(f"🎲 **بدأت اللعبة!** الدور الأول عشوائياً لفريق: **{turn_str}**")
         
@@ -229,11 +239,20 @@ class GameSession:
 
 class SetupView(discord.ui.View):
     def __init__(self):
-        super().__init__(timeout=None)
+        # تم تحديد وقت الانتظار بـ 30 ثانية
+        super().__init__(timeout=30.0) 
         self.red_leader = None
         self.blue_leader = None
         self.red_members = set()
         self.blue_members = set()
+        self.message = None # سيتم تعيينه بعد إرسال الرسالة لتحديثها عند انتهاء الوقت
+
+    # دالة يتم استدعاؤها تلقائياً عند انتهاء الـ 30 ثانية
+    async def on_timeout(self):
+        for item in self.children:
+            item.disabled = True
+        if self.message:
+            await self.message.edit(content="⏳ **انتهى وقت الانضمام (30 ثانية) وتم إلغاء اللعبة لعدم اكتمال العدد.**", view=self)
 
     @discord.ui.button(label="قائد أحمر 🔴", style=discord.ButtonStyle.danger)
     async def btn_red_leader(self, interaction: discord.Interaction, button: discord.ui.Button):
@@ -269,7 +288,9 @@ class SetupView(discord.ui.View):
             return
 
         await interaction.response.send_message("✅ جاري تجهيز اللعبة...", ephemeral=True)
-        self.stop()
+        # نوقف التايمر بمجرد بدء اللعبة حتى لا يلغيها
+        self.stop() 
+        
         game = GameSession(
             interaction.channel, 
             self.red_leader, 
@@ -287,11 +308,12 @@ class CodenamesCog(commands.Cog):
     async def start_setup(self, ctx):
         embed = discord.Embed(
             title="🎯 لعبة Codenames", 
-            description="اضغط على الأزرار بالأسفل للانضمام إلى الفرق. يجب وجود قائد وأعضاء لكل فريق.",
+            description="اضغط على الأزرار بالأسفل للانضمام إلى الفرق.\n⏳ **لديك 30 ثانية لتجميع اللاعبين وبدء اللعبة.**",
             color=discord.Color.dark_theme()
         )
         view = SetupView()
-        await ctx.send(embed=embed, view=view)
+        # حفظ رسالة الـ View حتى نتمكن من تعديلها إذا انتهى الوقت (Timeout)
+        view.message = await ctx.send(embed=embed, view=view)
 
 async def setup(bot):
     await bot.add_cog(CodenamesCog(bot))
