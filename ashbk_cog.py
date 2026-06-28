@@ -12,8 +12,8 @@ class ashbkgame(commands.Cog):
         self.scores_file = "ashbk_scores.json"
         self.scores = self.load_scores()
         
-        # 💡 هنا تضع اسم ملف الصورة فقط المتواجد داخل مجلد images (مثال: دراسة.png)
-        self.questions = [
+        
+       
            self.questions = [
             {"image": "صقر.png", "answer": "صقر"},
             {"image": "نمر.png", "answer": "نمر"},
@@ -66,7 +66,7 @@ class ashbkgame(commands.Cog):
             {"image": "جازان.png", "answer": "جازان"},
             {"image": "الخبر.png", "answer": "الخبر"}
         ]
-        ]
+        
         self.lock = False
 
     def load_scores(self):
