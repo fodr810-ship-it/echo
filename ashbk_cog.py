@@ -11,10 +11,7 @@ class ashbkgame(commands.Cog):
         self.bot = bot
         self.scores_file = "ashbk_scores.json"
         self.scores = self.load_scores()
-        
-        
-       
-           self.questions = [
+        self.questions = [
             {"image": "صقر.png", "answer": "صقر"},
             {"image": "نمر.png", "answer": "نمر"},
             {"image": "أسد.png", "answer": "أسد"},
