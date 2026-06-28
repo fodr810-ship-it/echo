@@ -109,7 +109,7 @@ class gmagame(commands.Cog):
         with open(self.scores_file, "w") as f:
             json.dump(self.scores, f)
 
-    @commands.command(name="مفرد")
+    @commands.command(name="جمع")
     async def start_game_cmd(self, ctx):
         await self.run_game(ctx.channel)
 
@@ -117,7 +117,7 @@ class gmagame(commands.Cog):
     async def on_message(self, message):
         if message.author.bot:
             return
-        if message.content.strip() == "مفرد":
+        if message.content.strip() == "جمع":
             await self.run_game(message.channel)
 
     async def run_game(self, channel):
