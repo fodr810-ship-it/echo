@@ -11,60 +11,61 @@ class ashbkgame(commands.Cog):
         self.bot = bot
         self.scores_file = "ashbk_scores.json"
         self.scores = self.load_scores()
+        
+        # 💡 هنا تضع اسم ملف الصورة فقط المتواجد داخل مجلد images (مثال: دراسة.png)
         self.questions = [
-            {"image": "blob:null/05257285-df4e-425b-b432-fc43a99cbe71", "answer": "دراسة"},
-            {"image": "", "answer": ""},
-            {"image": "", "answer": ""},
-            {"image": "", "answer": ""},
-            {"image": "", "answer": ""},
-            {"image": "", "answer": ""},
-            {"image": "", "answer": ""},
-            {"image": "", "answer": ""},
-            {"image": "", "answer": ""},
-            {"image": "", "answer": ""},
-            {"image": "", "answer": ""},
-            {"image": "", "answer": ""},
-            {"image": "", "answer": ""},
-            {"image": "", "answer": ""},
-            {"image": "", "answer": ""},
-            {"image": "", "answer": ""},
-            {"image": "", "answer": ""},
-            {"image": "", "answer": ""},
-            {"image": "", "answer": ""},
-            {"image": "", "answer": ""},
-            {"image": "", "answer": ""},
-            {"image": "", "answer": ""},
-            {"image": "", "answer": ""},
-            {"image": "", "answer": ""},
-            {"image": "", "answer": ""},
-            {"image": "", "answer": ""},
-            {"image": "", "answer": ""},
-            {"image": "", "answer": ""},
-            {"image": "", "answer": ""},
-            {"image": "", "answer": ""},
-            {"image": "", "answer": ""},
-            {"image": "", "answer": ""},
-            {"image": "", "answer": ""},
-            {"image": "", "answer": ""},
-            {"image": "", "answer": ""},
-            {"image": "", "answer": ""},
-            {"image": "", "answer": ""},
-            {"image": "", "answer": ""},
-            {"image": "", "answer": ""},
-            {"image": "", "answer": ""},
-            {"image": "", "answer": ""},
-            {"image": "", "answer": ""},
-            {"image": "", "answer": ""},
-            {"image": "", "answer": ""},
-            {"image": "", "answer": ""},
-            {"image": "", "answer": ""},
-            {"image": "", "answer": ""},
-            {"image": "", "answer": ""},
-            {"image": "", "answer": ""},
-            {"image": "", "answer": ""},
-            {"image": "", "answer": ""},
-            {"image": "", "answer": ""},
-            
+           self.questions = [
+            {"image": "صقر.png", "answer": "صقر"},
+            {"image": "نمر.png", "answer": "نمر"},
+            {"image": "أسد.png", "answer": "أسد"},
+            {"image": "غزال.png", "answer": "غزال"},
+            {"image": "ثعلب.png", "answer": "ثعلب"},
+            {"image": "ذئب.png", "answer": "ذئب"},
+            {"image": "جمل.png", "answer": "جمل"},
+            {"image": "حصان.png", "answer": "حصان"},
+            {"image": "أرنب.png", "answer": "أرنب"},
+            {"image": "فهد.png", "answer": "فهد"},
+            {"image": "تفاح.png", "answer": "تفاح"},
+            {"image": "موز.png", "answer": "موز"},
+            {"image": "عنب.png", "answer": "عنب"},
+            {"image": "تمر.png", "answer": "تمر"},
+            {"image": "خوخ.png", "answer": "خوخ"},
+            {"image": "رمان.png", "answer": "رمان"},
+            {"image": "ليمون.png", "answer": "ليمون"},
+            {"image": "بطيخ.png", "answer": "بطيخ"},
+            {"image": "كرز.png", "answer": "كرز"},
+            {"image": "مانجو.png", "answer": "مانجو"},
+            {"image": "كتاب.png", "answer": "كتاب"},
+            {"image": "قلم.png", "answer": "قلم"},
+            {"image": "دفتر.png", "answer": "دفتر"},
+            {"image": "مكتب.png", "answer": "مكتب"},
+            {"image": "كرسي.png", "answer": "كرسي"},
+            {"image": "باب.png", "answer": "باب"},
+            {"image": "نافذة.png", "answer": "نافذة"},
+            {"image": "ساعة.png", "answer": "ساعة"},
+            {"image": "مفتاح.png", "answer": "مفتاح"},
+            {"image": "هاتف.png", "answer": "هاتف"},
+            {"image": "شمس.png", "answer": "شمس"},
+            {"image": "قمر.png", "answer": "قمر"},
+            {"image": "نجم.png", "answer": "نجم"},
+            {"image": "بحر.png", "answer": "بحر"},
+            {"image": "نهر.png", "answer": "نهر"},
+            {"image": "جبل.png", "answer": "جبل"},
+            {"image": "سحاب.png", "answer": "سحاب"},
+            {"image": "مطر.png", "answer": "مطر"},
+            {"image": "شجرة.png", "answer": "شجرة"},
+            {"image": "وردة.png", "answer": "وردة"},
+            {"image": "الرياض.png", "answer": "الرياض"},
+            {"image": "مكة.png", "answer": "مكة"},
+            {"image": "جدة.png", "answer": "جدة"},
+            {"image": "الدمام.png", "answer": "الدمام"},
+            {"image": "أبها.png", "answer": "أبها"},
+            {"image": "تبوك.png", "answer": "تبوك"},
+            {"image": "حائل.png", "answer": "حائل"},
+            {"image": "نجران.png", "answer": "نجران"},
+            {"image": "جازان.png", "answer": "جازان"},
+            {"image": "الخبر.png", "answer": "الخبر"}
+        ]
         ]
         self.lock = False
 
@@ -96,29 +97,39 @@ class ashbkgame(commands.Cog):
 
         q = random.choice(self.questions)
         self.lock = True
-        await channel.send(q["image"])
+        
+        # 📂 تحديد مسار المجلد الذي يحتوي على الصور
+        image_path = os.path.join("images", q["image"])
+
+        # ⚙️ التحقق من أن ملف الصورة موجود فعلياً في المجلد لتجنب كراش البوت
+        if os.path.exists(image_path):
+            # رفع الصورة كملف حقيقي إلى ديسكورد
+            file = discord.File(image_path, filename=q["image"])
+            await channel.send(file=file)
+        else:
+            # حل بديل ذكي في حال نسيان إضافة الصورة للمجلد
+            await channel.send(f"⚠️ خطأ: لم يتم العثور على ملف الصورة في المسار: `{image_path}`")
+            self.lock = False
+            return
 
         def check(m):
             return m.channel == channel and not m.author.bot
 
         try:
-            while True:  # حلقة تكرار للسماح بمحاولات متعددة
+            while True:
                 msg = await self.bot.wait_for("message", check=check, timeout=30.0)
 
                 if msg.content.strip() == q["answer"]:
-                    # تحديث النقاط
                     user_id = str(msg.author.id)
                     self.scores[user_id] = self.scores.get(user_id, 0) + 1
                     self.save_scores()
 
-                    # إنشاء الإيمبد
                     embed = discord.Embed(
-                        title="🎉!",
+                        title="🎉 صحيحة!",
                         description=f"مبروك {msg.author.mention}، لقد فزت في اللعبة!",
                         color=discord.Color.red(),
                     )
 
-                    # إضافة الزر (يحتوي على النقاط)
                     view = discord.ui.View()
                     button = discord.ui.Button(
                         label=f"نقاطك: {self.scores[user_id]}",
@@ -128,9 +139,9 @@ class ashbkgame(commands.Cog):
                     view.add_item(button)
 
                     await channel.send(embed=embed, view=view)
-                    break  # خروج من اللعبة بعد الفوز
+                    break 
                 else:
-                    await msg.add_reaction("❌")  # تفاعل إكس على الإجابة الخاطئة
+                    await msg.add_reaction("❌") 
 
         except asyncio.TimeoutError:
             await channel.send("⌛ انتهى الوقت! لم يقم أحد بالإجابة الصحيحة.")
