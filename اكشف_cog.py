@@ -3,10 +3,10 @@ from discord.ext import commands
 import asyncio
 import random
 
-# نظام حفظ النقاط المبسط (استبدله بقاعدة البيانات الخاصة بك)
+# نظام حفظ النقاط
 points_db = {}
 
-# قائمة الكلمات (كلمات عشوائية متعلقة بالرصيد العالي والاقتصاد)
+# قائمة كلمات الرصيد والاقتصاد
 ECONOMY_WORDS = [
     "استثمار", "اقتصاد", "مليونير", "ميزانية", 
     "بورصة", "ارباح", "تجارة", "تمويل", 
@@ -16,7 +16,6 @@ ECONOMY_WORDS = [
 class RevealWordCog(commands.Cog):
     def __init__(self, bot):
         self.bot = bot
-        # حفظ الرومات اللي فيها لعبة شغالة عشان ما تتداخل الألعاب
         self.active_channels = set()
 
     @commands.Cog.listener()
@@ -24,20 +23,19 @@ class RevealWordCog(commands.Cog):
         if message.author.bot:
             return
             
-        # الكلمة اللي تشغل اللعبة
         if message.content == "اكشف":
-            # التأكد إن مافيه لعبة ثانية شغالة بنفس الروم
             if message.channel.id in self.active_channels:
                 await message.channel.send("⏳ فيه لعبة شغالة حالياً في هذا الروم، انتظر تخلص!")
                 return
                 
             self.active_channels.add(message.channel.id)
             
-            # اختيار كلمة عشوائية وإعداد الحروف المخفية
             word = random.choice(ECONOMY_WORDS)
             hidden_word = ["_" for _ in word]
+            
+            # إنشاء أرقام تمثل أماكن الحروف، ثم لخبطتها ليكون الكشف عشوائي
             hidden_indices = list(range(len(word)))
-            random.shuffle(hidden_indices) # لخبطة ترتيب الحروف عشان تنكشف بشكل عشوائي
+            random.shuffle(hidden_indices) 
             
             embed = discord.Embed(
                 title="🔍 لعبة اكشف الكلمة",
@@ -46,47 +44,43 @@ class RevealWordCog(commands.Cog):
             )
             game_msg = await message.channel.send(embed=embed)
             
-            # وظيفة (Task) تعمل في الخلفية لكشف الحروف كل 5 ثواني
             async def reveal_loop():
                 try:
-                    # يوقف كشف إذا بقى حرف واحد فقط
+                    # اللوب بيشتغل كل ثانيتين، ويوقف إذا بقى حرف واحد فقط (عشان ما يحلها البوت)
                     while len(hidden_indices) > 1:
-                        await asyncio.sleep(5)
+                        await asyncio.sleep(2)
+                        
+                        # سحب حرف عشوائي من القائمة الملخبطة وكشفه
                         idx = hidden_indices.pop()
                         hidden_word[idx] = word[idx]
                         
                         embed.description = f"الكلمة: `{' '.join(hidden_word)}`\n\nأول شخص يكتب الكلمة كاملة هو الفائز!"
                         await game_msg.edit(embed=embed)
                 except asyncio.CancelledError:
-                    # يتم استدعاء هذا الخطأ عمداً عند إلغاء الوظيفة (مثلاً إذا فاز شخص)
                     pass
 
-            # تشغيل وظيفة الكشف
+            # تشغيل وظيفة كشف الحروف في الخلفية
             reveal_task = asyncio.create_task(reveal_loop())
             
-            # دالة للتحقق من الرسائل الصحيحة (في نفس الروم + نفس الكلمة)
             def check_answer(m):
                 return m.channel == message.channel and m.content.strip() == word and not m.author.bot
 
             try:
-                # انتظار الإجابة الصحيحة لمدة 30 ثانية
+                # ننتظر 30 ثانية للإجابة
                 winner_msg = await self.bot.wait_for('message', check=check_answer, timeout=30.0)
                 
-                # إذا جاوب شخص، نوقف وظيفة كشف الحروف
+                # نوقف اللوب حق التعديل لأن فيه شخص فاز
                 reveal_task.cancel()
                 
-                # إضافة النقاط للفائز
                 user_id = str(winner_msg.author.id)
                 points_db[user_id] = points_db.get(user_id, 0) + 1
                 
-                # إعداد إمبد الفوز
                 win_embed = discord.Embed(
                     title="🎉 عندنا بطل!",
                     description=f"الأسطورة {winner_msg.author.mention} عرف الكلمة أول واحد!\nالكلمة كانت: **{word}**",
                     color=discord.Color.green()
                 )
                 
-                # زر إظهار النقاط
                 view = discord.ui.View()
                 points_btn = discord.ui.Button(
                     label=f"رصيد نقاطك: {points_db[user_id]}", 
@@ -98,7 +92,6 @@ class RevealWordCog(commands.Cog):
                 await message.channel.send(embed=win_embed, view=view)
 
             except asyncio.TimeoutError:
-                # إذا خلصت الـ 30 ثانية ومحد جاوب
                 reveal_task.cancel()
                 timeout_embed = discord.Embed(
                     title="⏳ انتهى الوقت!",
@@ -108,7 +101,6 @@ class RevealWordCog(commands.Cog):
                 await message.channel.send(embed=timeout_embed)
                 
             finally:
-                # إزالة الروم من القائمة عشان يقدرون يلعبون مرة ثانية
                 self.active_channels.remove(message.channel.id)
 
 async def setup(bot):
