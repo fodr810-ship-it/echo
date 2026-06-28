@@ -9,7 +9,7 @@ import os
 class fastgame(commands.Cog):
     def __init__(self, bot):    
         self.bot = bot
-        self.scores_file = "asr3_scores.json"
+        self.scores_file = "fast_scores.json"
         self.scores = self.load_scores()
         self.questions = [
             {"image": "اسرع_1.png", "answer": "شمس"},
@@ -112,7 +112,8 @@ class fastgame(commands.Cog):
             {"image": "اسرع_98.png", "answer": "فيل"},
             {"image": "اسرع_99.png", "answer": "قرد"},
             {"image": "اسرع_100.png", "answer": "عصفور"}
-        ]   
+            ]
+        
         self.lock = False
 
     def load_scores(self):
@@ -143,29 +144,39 @@ class fastgame(commands.Cog):
 
         q = random.choice(self.questions)
         self.lock = True
-        await channel.send(q["image"])
+        
+        # 📂 تحديد مسار المجلد الذي يحتوي على الصور
+        image_path = os.path.join("images", q["image"])
+
+        # ⚙️ التحقق من أن ملف الصورة موجود فعلياً في المجلد لتجنب كراش البوت
+        if os.path.exists(image_path):
+            # رفع الصورة كملف حقيقي إلى ديسكورد
+            file = discord.File(image_path, filename=q["image"])
+            await channel.send(file=file)
+        else:
+            # حل بديل ذكي في حال نسيان إضافة الصورة للمجلد
+            await channel.send(f"⚠️ خطأ: لم يتم العثور على ملف الصورة في المسار: `{image_path}`")
+            self.lock = False
+            return
 
         def check(m):
             return m.channel == channel and not m.author.bot
 
         try:
-            while True:  # حلقة تكرار للسماح بمحاولات متعددة
+            while True:
                 msg = await self.bot.wait_for("message", check=check, timeout=30.0)
 
                 if msg.content.strip() == q["answer"]:
-                    # تحديث النقاط
                     user_id = str(msg.author.id)
                     self.scores[user_id] = self.scores.get(user_id, 0) + 1
                     self.save_scores()
 
-                    # إنشاء الإيمبد
                     embed = discord.Embed(
-                        title="🎉!",
+                        title="🎉 صحيحة!",
                         description=f"مبروك {msg.author.mention}، لقد فزت في اللعبة!",
                         color=discord.Color.red(),
                     )
 
-                    # إضافة الزر (يحتوي على النقاط)
                     view = discord.ui.View()
                     button = discord.ui.Button(
                         label=f"نقاطك: {self.scores[user_id]}",
@@ -175,9 +186,9 @@ class fastgame(commands.Cog):
                     view.add_item(button)
 
                     await channel.send(embed=embed, view=view)
-                    break  # خروج من اللعبة بعد الفوز
+                    break 
                 else:
-                    await msg.add_reaction("❌")  # تفاعل إكس على الإجابة الخاطئة
+                    await msg.add_reaction("❌") 
 
         except asyncio.TimeoutError:
             await channel.send("⌛ انتهى الوقت! لم يقم أحد بالإجابة الصحيحة.")
