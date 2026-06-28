@@ -51,7 +51,7 @@ class GamesListCog(commands.Cog):
                 embed.set_thumbnail(url=self.bot.user.display_avatar.url)
             
             # فوتر خفيف يعلمهم كيف يشوفون نقاطهم
-            embed.set_footer(text="لمعرفة رصيدك البنكي اكتب: نقاط 💳")
+            embed.set_footer(text="EchoGamesSystem")
             
             await message.channel.send(embed=embed)
 
