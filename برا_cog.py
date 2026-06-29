@@ -187,21 +187,29 @@ class LobbyView(discord.ui.View):
         self.message = None
 
     async def on_timeout(self):
+        # تعطيل الأزرار
         for item in self.children:
             item.disabled = True
         
-        if len(self.players) < 3:
-            await self.message.edit(content="⏳ **انتهى الوقت!**\nالعدد غير كافٍ لبدء اللعبة (الحد الأدنى 3 لاعبين).", view=self)
-        else:
-            await self.message.edit(content=f"✅ **اكتمل العدد وانتهى وقت الانضمام.**\nاللاعبين: {len(self.players)}", view=self)
-            game = GameSession(self.message.channel, self.host, self.players)
-            
-            embed = discord.Embed(
-                title="⚙️ إعدادات اللعبة",
-                description=f"{self.host.mention}، الرجاء اختيار تصنيف الكلمات للبدء:",
-                color=discord.Color.blue()
-            )
-            await self.message.channel.send(embed=embed, view=CategorySelectView(game))
+        try:
+            if len(self.players) < 3:
+                await self.message.edit(content="⏳ **انتهى الوقت!**\nالعدد غير كافٍ لبدء اللعبة (الحد الأدنى 3 لاعبين).", view=self)
+            else:
+                await self.message.edit(content=f"✅ **اكتمل العدد وانتهى وقت الانضمام.**\nاللاعبين: {len(self.players)}", view=self)
+                game = GameSession(self.message.channel, self.host, self.players)
+                
+                embed = discord.Embed(
+                    title="⚙️ إعدادات اللعبة",
+                    description=f"{self.host.mention}، الرجاء اختيار تصنيف الكلمات للبدء:",
+                    color=discord.Color.blue()
+                )
+                await self.message.channel.send(embed=embed, view=CategorySelectView(game))
+                
+        except discord.NotFound:
+            # هذا السطر يمنع ظهور الخطأ في الكونسول إذا تم حذف الرسالة قبل انتهاء الوقت
+            pass
+        except Exception as e:
+            print(f"حدث خطأ غير متوقع في on_timeout: {e}")
 
     @discord.ui.button(label="دخول 📥", style=discord.ButtonStyle.success)
     async def join_button(self, interaction: discord.Interaction, button: discord.ui.Button):
