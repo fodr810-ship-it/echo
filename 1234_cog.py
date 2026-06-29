@@ -7,11 +7,14 @@ import os
 
 
 class arqgame(commands.Cog):
-    def __init__(self, bot):
+    def __init__(self, bot):    
         self.bot = bot
-        # نفس اسم ملف النقاط الموحد المستخدم في اللعبة السابقة
-        self.scores_file = "global_points.json"
-        self.active_channels = set() # قفل اللعبة لكل روم بشكل منفصل لمنع التداخل
+        self.scores_file = "global_points.json" # نفس ملف النقاط لدمج الرصيد
+        
+        # 🟢 تعديل القفل: إنشاء قفل عام داخل البوت إذا لم يكن موجوداً
+        if not hasattr(self.bot, 'global_game_lock'):
+            self.bot.global_game_lock = set()
+
         self.questions = [
             {"image": "ارقام_1.png", "answer": "10384"},
             {"image": "ارقام_2.png", "answer": "12694"},
@@ -75,16 +78,12 @@ class arqgame(commands.Cog):
             {"image": "ارقام_60.png", "answer": "99043"}
         ]
 
-    # دالة قراءة النقاط وتحديثها في الملف الموحد مباشرة
     def add_score(self, user_id):
         if os.path.exists(self.scores_file):
             with open(self.scores_file, "r", encoding="utf-8") as f:
-                try:
-                    scores = json.load(f)
-                except json.JSONDecodeError:
-                    scores = {}
-        else:
-            scores = {}
+                try: scores = json.load(f)
+                except json.JSONDecodeError: scores = {}
+        else: scores = {}
         
         user_id_str = str(user_id)
         scores[user_id_str] = scores.get(user_id_str, 0) + 1
@@ -100,29 +99,26 @@ class arqgame(commands.Cog):
 
     @commands.Cog.listener()
     async def on_message(self, message):
-        if message.author.bot:
-            return
+        if message.author.bot: return
         if message.content.strip() == "ارقام":
             await self.run_game(message.channel)
 
     async def run_game(self, channel):
-        # التحقق إذا كانت اللعبة تعمل في هذا الروم تحديداً
-        if channel.id in self.active_channels:
-            return await channel.send("⚠️ اللعبة جارية بالفعل في هذا الروم!")
+        # 🟢 تعديل الفحص: فحص القفل العام المشترك في البوت
+        if channel.id in self.bot.global_game_lock:
+            return await channel.send("⚠️ هناك لعبة جارية بالفعل في هذا الروم!")
 
         q = random.choice(self.questions)
-        self.active_channels.add(channel.id) # إضافة الروم لقائمة الرومات النشطة
+        self.bot.global_game_lock.add(channel.id) # قفل الروم في البوت كاملاً
         
-        # 📂 تحديد مسار المجلد الذي يحتوي على الصور
         image_path = os.path.join("images", q["image"])
 
-        # ⚙️ التحقق من أن ملف الصورة موجود فعلياً
         if os.path.exists(image_path):
             file = discord.File(image_path, filename=q["image"])
             await channel.send(file=file)
         else:
             await channel.send(f"⚠️ خطأ: لم يتم العثور على ملف الصورة في المسار: `{image_path}`")
-            self.active_channels.remove(channel.id)
+            self.bot.global_game_lock.discard(channel.id) # إلغاء القفل عند الخطأ
             return
 
         def check(m):
@@ -132,9 +128,7 @@ class arqgame(commands.Cog):
             while True:
                 msg = await self.bot.wait_for("message", check=check, timeout=30.0)
 
-                # إذا الإجابة صحيحة
                 if msg.content.strip() == q["answer"]:
-                    # تحديث وحفظ النقاط في الملف الموحد
                     new_score = self.add_score(msg.author.id)
 
                     embed = discord.Embed(
@@ -153,8 +147,6 @@ class arqgame(commands.Cog):
 
                     await channel.send(embed=embed, view=view)
                     break 
-                
-                # التفاعل ❌ فقط إذا كان العضو قد كتب أرقام، حتى لا نخرب على أوامر أو محادثات أخرى
                 elif msg.content.strip().isdigit():
                     await msg.add_reaction("❌") 
 
@@ -162,9 +154,8 @@ class arqgame(commands.Cog):
             await channel.send("⌛ انتهى الوقت! لم يقم أحد بالإجابة الصحيحة.")
 
         finally:
-            # إلغاء القفل عن الروم بعد انتهاء اللعبة أو انتهاء الوقت
-            if channel.id in self.active_channels:
-                self.active_channels.remove(channel.id)
+            # 🟢 تعديل النهاية: فتح القفل العام المشترك
+            self.bot.global_game_lock.discard(channel.id)
 
 
 async def setup(bot):
