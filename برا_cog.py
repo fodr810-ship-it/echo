@@ -148,6 +148,19 @@ class ActiveGameView(discord.ui.View):
         view.add_item(VoteSelect(self.game))
         await interaction.response.send_message("🎯 **اختر من تعتقد أنه برا السالفة:**", view=view, ephemeral=True)
 
+    @discord.ui.button(label="❌ إنهاء اللعبة", style=discord.ButtonStyle.secondary, custom_id="btn_cancel_game", row=1)
+    async def btn_cancel_game(self, interaction: discord.Interaction, button: discord.ui.Button):
+        if interaction.user != self.game.host:
+            await interaction.response.send_message("❌ صاحب اللعبة فقط يمكنه إنهاء اللعبة!", ephemeral=True)
+            return
+
+        self.game.is_active = False
+        
+        for child in self.children:
+            child.disabled = True
+            
+        await interaction.response.edit_message(content="🛑 **تم إلغاء اللعبة بواسطة صاحب اللعبة.**", embed=None, view=self)
+
 class CategorySelectView(discord.ui.View):
     def __init__(self, game):
         super().__init__(timeout=None)
@@ -167,11 +180,9 @@ class CategorySelectView(discord.ui.View):
         selected_category = select.values[0]
         self.game.setup_game(selected_category)
 
-        # تعطيل القائمة بعد الاختيار
         select.disabled = True
         await interaction.response.edit_message(view=self.view)
 
-        # إرسال أزرار اللعب
         embed = discord.Embed(
             title="🎮 بدأت اللعبة!",
             description=f"التصنيف: **{selected_category}**\n\nاضغط على (📜 وش السالفة؟) لتعرف دورك.\nاضغط (🗣️ من يسأل؟) لمعرفة دور من في السؤال.\nاذا شكيتوا بأحد اضغطوا (🗳️ بدء التصويت).",
@@ -181,13 +192,12 @@ class CategorySelectView(discord.ui.View):
 
 class LobbyView(discord.ui.View):
     def __init__(self, host):
-        super().__init__(timeout=30.0) # انتظار 30 ثانية
+        super().__init__(timeout=30.0) 
         self.host = host
         self.players = [host]
         self.message = None
 
     async def on_timeout(self):
-        # تعطيل الأزرار
         for item in self.children:
             item.disabled = True
         
@@ -206,7 +216,6 @@ class LobbyView(discord.ui.View):
                 await self.message.channel.send(embed=embed, view=CategorySelectView(game))
                 
         except discord.NotFound:
-            # هذا السطر يمنع ظهور الخطأ في الكونسول إذا تم حذف الرسالة قبل انتهاء الوقت
             pass
         except Exception as e:
             print(f"حدث خطأ غير متوقع في on_timeout: {e}")
