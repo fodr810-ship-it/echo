@@ -6,7 +6,7 @@ import os
 class PointsCog(commands.Cog):
     def __init__(self, bot):
         self.bot = bot
-        self.scores_file = "global_points.json" # نفس ملف النقاط الموحد
+        self.scores_file = "global_points.json" # ملف النقاط الموحد
 
     # دالة لقراءة النقاط من الملف
     def get_points(self, user_id):
@@ -20,7 +20,7 @@ class PointsCog(commands.Cog):
                     return 0
         return 0
 
-    # 1️⃣ أمر بالبريفكس (مثال: !نقاط أو !نقاط @منشن)
+    
     @commands.command(name="نقاط", aliases=["نقاطي", "رصيدي", "points"])
     async def check_points_cmd(self, ctx, member: discord.Member = None):
         # إذا لم يمنشن أحد، نعرض نقاط صاحب الأمر نفسه
@@ -40,7 +40,7 @@ class PointsCog(commands.Cog):
             
         await ctx.send(embed=embed)
 
-    # 2️⃣ استجابة للكلمة العادية في الشات (بدون بريفكس)
+
     @commands.Cog.listener()
     async def on_message(self, message: discord.Message):
         if message.author.bot:
@@ -57,7 +57,6 @@ class PointsCog(commands.Cog):
             embed.set_thumbnail(url=message.author.display_avatar.url)
             
             await message.channel.send(embed=embed)
-
 
 async def setup(bot):
     await bot.add_cog(PointsCog(bot))
