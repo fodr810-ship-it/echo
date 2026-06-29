@@ -7,10 +7,11 @@ import os
 
 
 class arqgame(commands.Cog):
-    def __init__(self, bot):    
+    def __init__(self, bot):
         self.bot = bot
-        self.scores_file = "arq_scores.json"
-        self.scores = self.load_scores()
+        # نفس اسم ملف النقاط الموحد المستخدم في اللعبة السابقة
+        self.scores_file = "global_points.json"
+        self.active_channels = set() # قفل اللعبة لكل روم بشكل منفصل لمنع التداخل
         self.questions = [
             {"image": "ارقام_1.png", "answer": "10384"},
             {"image": "ارقام_2.png", "answer": "12694"},
@@ -71,23 +72,27 @@ class arqgame(commands.Cog):
             {"image": "ارقام_57.png", "answer": "93154"},
             {"image": "ارقام_58.png", "answer": "96347"},
             {"image": "ارقام_59.png", "answer": "97832"},
-            {"image": "ارقام_60.png", "answer": "99043"},
-           
-            
+            {"image": "ارقام_60.png", "answer": "99043"}
         ]
+
+    # دالة قراءة النقاط وتحديثها في الملف الموحد مباشرة
+    def add_score(self, user_id):
+        if os.path.exists(self.scores_file):
+            with open(self.scores_file, "r", encoding="utf-8") as f:
+                try:
+                    scores = json.load(f)
+                except json.JSONDecodeError:
+                    scores = {}
+        else:
+            scores = {}
         
-        self.lock = False
-
-    def load_scores(self):
-        return (
-            json.load(open(self.scores_file, "r"))
-            if os.path.exists(self.scores_file)
-            else {}
-        )
-
-    def save_scores(self):
-        with open(self.scores_file, "w") as f:
-            json.dump(self.scores, f)
+        user_id_str = str(user_id)
+        scores[user_id_str] = scores.get(user_id_str, 0) + 1
+        
+        with open(self.scores_file, "w", encoding="utf-8") as f:
+            json.dump(scores, f, ensure_ascii=False, indent=4)
+            
+        return scores[user_id_str]
 
     @commands.command(name="ارقام")
     async def start_game_cmd(self, ctx):
@@ -101,24 +106,23 @@ class arqgame(commands.Cog):
             await self.run_game(message.channel)
 
     async def run_game(self, channel):
-        if self.lock:
-            return await channel.send("اللعبة جارية بالفعل!")
+        # التحقق إذا كانت اللعبة تعمل في هذا الروم تحديداً
+        if channel.id in self.active_channels:
+            return await channel.send("⚠️ اللعبة جارية بالفعل في هذا الروم!")
 
         q = random.choice(self.questions)
-        self.lock = True
+        self.active_channels.add(channel.id) # إضافة الروم لقائمة الرومات النشطة
         
         # 📂 تحديد مسار المجلد الذي يحتوي على الصور
         image_path = os.path.join("images", q["image"])
 
-        # ⚙️ التحقق من أن ملف الصورة موجود فعلياً في المجلد لتجنب كراش البوت
+        # ⚙️ التحقق من أن ملف الصورة موجود فعلياً
         if os.path.exists(image_path):
-            # رفع الصورة كملف حقيقي إلى ديسكورد
             file = discord.File(image_path, filename=q["image"])
             await channel.send(file=file)
         else:
-            # حل بديل ذكي في حال نسيان إضافة الصورة للمجلد
             await channel.send(f"⚠️ خطأ: لم يتم العثور على ملف الصورة في المسار: `{image_path}`")
-            self.lock = False
+            self.active_channels.remove(channel.id)
             return
 
         def check(m):
@@ -128,20 +132,20 @@ class arqgame(commands.Cog):
             while True:
                 msg = await self.bot.wait_for("message", check=check, timeout=30.0)
 
+                # إذا الإجابة صحيحة
                 if msg.content.strip() == q["answer"]:
-                    user_id = str(msg.author.id)
-                    self.scores[user_id] = self.scores.get(user_id, 0) + 1
-                    self.save_scores()
+                    # تحديث وحفظ النقاط في الملف الموحد
+                    new_score = self.add_score(msg.author.id)
 
                     embed = discord.Embed(
                         title="🎉 صحيحة!",
                         description=f"مبروك {msg.author.mention}، لقد فزت في اللعبة!",
-                        color=discord.Color.red(),
+                        color=discord.Color.green(),
                     )
 
                     view = discord.ui.View()
                     button = discord.ui.Button(
-                        label=f"نقاطك: {self.scores[user_id]}",
+                        label=f"نقاطك الإجمالية: {new_score}",
                         style=discord.ButtonStyle.primary,
                         disabled=True,
                     )
@@ -149,13 +153,18 @@ class arqgame(commands.Cog):
 
                     await channel.send(embed=embed, view=view)
                     break 
-                else:
+                
+                # التفاعل ❌ فقط إذا كان العضو قد كتب أرقام، حتى لا نخرب على أوامر أو محادثات أخرى
+                elif msg.content.strip().isdigit():
                     await msg.add_reaction("❌") 
 
         except asyncio.TimeoutError:
             await channel.send("⌛ انتهى الوقت! لم يقم أحد بالإجابة الصحيحة.")
 
-        self.lock = False
+        finally:
+            # إلغاء القفل عن الروم بعد انتهاء اللعبة أو انتهاء الوقت
+            if channel.id in self.active_channels:
+                self.active_channels.remove(channel.id)
 
 
 async def setup(bot):
