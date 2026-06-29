@@ -1,13 +1,15 @@
 import discord
 from discord.ext import commands
 import random
-
-# نظام نقاط مبسط (تقدر تربطه بـ SQLite أو JSON اللي تستخدمها في بوتك)
-points_db = {}
+import json
+import os
 
 class FastButtonGame20(discord.ui.View):
-    def __init__(self):
+    def __init__(self, cog, channel_id):
         super().__init__(timeout=30.0) 
+        self.cog = cog
+        self.channel_id = channel_id
+        self.message_obj = None # لحفظ الرسالة والتحكم فيها عند التايم آوت
         self.winner = None
         
         # اختيار زر واحد عشوائياً ليكون الفائز من بين 20 زر (الاندكس من 0 إلى 19)
@@ -46,15 +48,16 @@ class FastButtonGame20(discord.ui.View):
             
         self.winner = interaction.user
         
+        # 🟢 فتح القفل العام للبوت في هذه الروم فور الفوز للسماح بلعب ألعاب أخرى
+        self.cog.bot.global_game_lock.discard(self.channel_id)
+        
         # تعطيل كل الـ 20 زر بعد الفوز
         for child in self.children:
             child.disabled = True
         await interaction.message.edit(view=self)
         
-        # إضافة النقاط
-        user_id = str(interaction.user.id)
-        points_db[user_id] = points_db.get(user_id, 0) + 1
-        current_points = points_db[user_id]
+        # 🟢 تحديث وحفظ النقاط في ملف الجيسون الموحد المشترك
+        new_score = self.cog.add_score(interaction.user.id)
         
         # إمبد الفوز
         win_embed = discord.Embed(
@@ -66,7 +69,7 @@ class FastButtonGame20(discord.ui.View):
         # زر عرض النقاط
         points_view = discord.ui.View()
         points_btn = discord.ui.Button(
-            label=f"نقاطك: {current_points}", 
+            label=f"نقاطك الإجمالية: {new_score}", 
             style=discord.ButtonStyle.primary, 
             disabled=True
         )
@@ -77,26 +80,81 @@ class FastButtonGame20(discord.ui.View):
 
     async def wrong_answer(self, interaction: discord.Interaction):
         await interaction.response.send_message("خطأ! ركز على الزر المنور 🎯", ephemeral=True)
+        
+    # دالة ذكية لإغلاق اللعبة وفتح القفل إذا مرت 30 ثانية ولم يضغط أحد على الزر الصحيح
+    async def on_timeout(self):
+        # 🟢 فتح القفل العام للبوت
+        self.cog.bot.global_game_lock.discard(self.channel_id)
+        
+        # تعطيل جميع الأزرار
+        for child in self.children:
+            child.disabled = True
+            
+        if self.message_obj:
+            try:
+                timeout_embed = discord.Embed(
+                    title="⏳ انتهى الوقت!",
+                    description="محد قدر يضغط الزر الصحيح في الوقت المحدد.",
+                    color=discord.Color.red()
+                )
+                await self.message_obj.edit(embed=timeout_embed, view=self)
+            except:
+                pass
 
 
 class ButtonGameCog(commands.Cog):
     def __init__(self, bot):
         self.bot = bot
+        self.scores_file = "global_points.json" # ملف النقاط المشترك
+        
+        # 🟢 التأكد من وجود القفل العام المشترك داخل كائن البوت
+        if not hasattr(self.bot, 'global_game_lock'):
+            self.bot.global_game_lock = set()
+
+    # دالة قراءة وإضافة النقاط لملف الجيسون
+    def add_score(self, user_id):
+        if os.path.exists(self.scores_file):
+            with open(self.scores_file, "r", encoding="utf-8") as f:
+                try:
+                    scores = json.load(f)
+                except json.JSONDecodeError:
+                    scores = {}
+        else:
+            scores = {}
+        
+        user_id_str = str(user_id)
+        scores[user_id_str] = scores.get(user_id_str, 0) + 1
+        
+        with open(self.scores_file, "w", encoding="utf-8") as f:
+            json.dump(scores, f, ensure_ascii=False, indent=4)
+            
+        return scores[user_id_str]
 
     @commands.Cog.listener()
     async def on_message(self, message: discord.Message):
         if message.author.bot:
             return
             
-        if message.content == "زر":
+        if message.content.strip() == "زر":
+            # 🟢 الفحص باستخدام القفل العام لمنع تشغيل اللعبة إذا كانت هناك لعبة أخرى نشطة
+            if message.channel.id in self.bot.global_game_lock:
+                await message.channel.send("⚠️ هناك لعبة جارية بالفعل في هذا الروم! انتظر حتى تنتهي.")
+                return
+
+            # قفل الروم في البوت كاملاً
+            self.bot.global_game_lock.add(message.channel.id)
+
             embed = discord.Embed(
                 title="🎮 لعبة صيد الزر",
                 description="أمامك 20 زر، أسرع واحد يضغط على الزر المنوّر (🎯 الأخضر) هو الفائز!",
                 color=discord.Color.blurple()
             )
             
-            view = FastButtonGame20()
-            await message.channel.send(embed=embed, view=view)
+            view = FastButtonGame20(self, message.channel.id)
+            msg = await message.channel.send(embed=embed, view=view)
+            
+            # تمرير كائن الرسالة للكلاس للتحكم به عند انتهاء الوقت
+            view.message_obj = msg
 
 async def setup(bot):
     await bot.add_cog(ButtonGameCog(bot))

@@ -9,8 +9,12 @@ import os
 class trrgame(commands.Cog):
     def __init__(self, bot):    
         self.bot = bot
-        self.scores_file = "trr_scores.json"
-        self.scores = self.load_scores()
+        self.scores_file = "global_points.json" # 🟢 اسم ملف النقاط الموحد والمشترك
+        
+        # 🟢 التأكد من وجود القفل العام المشترك داخل كائن البوت
+        if not hasattr(self.bot, 'global_game_lock'):
+            self.bot.global_game_lock = set()
+
         self.questions = [
             {"image": "ترتيب_1.png", "answer": "012459"},
             {"image": "ترتيب_2.png", "answer": "134789"},
@@ -94,19 +98,25 @@ class trrgame(commands.Cog):
             {"image": "ترتيب_80.png", "answer": "024578"}
         
         ]
+
+    # 🟢 دالة قراءة النقاط وتحديثها في الملف الموحد مباشرة
+    def add_score(self, user_id):
+        if os.path.exists(self.scores_file):
+            with open(self.scores_file, "r", encoding="utf-8") as f:
+                try:
+                    scores = json.load(f)
+                except json.JSONDecodeError:
+                    scores = {}
+        else:
+            scores = {}
         
-        self.lock = False
-
-    def load_scores(self):
-        return (
-            json.load(open(self.scores_file, "r"))
-            if os.path.exists(self.scores_file)
-            else {}
-        )
-
-    def save_scores(self):
-        with open(self.scores_file, "w") as f:
-            json.dump(self.scores, f)
+        user_id_str = str(user_id)
+        scores[user_id_str] = scores.get(user_id_str, 0) + 1
+        
+        with open(self.scores_file, "w", encoding="utf-8") as f:
+            json.dump(scores, f, ensure_ascii=False, indent=4)
+            
+        return scores[user_id_str]
 
     @commands.command(name="ترتيب")
     async def start_game_cmd(self, ctx):
@@ -120,24 +130,24 @@ class trrgame(commands.Cog):
             await self.run_game(message.channel)
 
     async def run_game(self, channel):
-        if self.lock:
-            return await channel.send("اللعبة جارية بالفعل!")
+        # 🟢 الفحص باستخدام القفل العام لمنع تشغيل اللعبة إذا كانت هناك لعبة أخرى نشطة
+        if channel.id in self.bot.global_game_lock:
+            return await channel.send("⚠️ هناك لعبة جارية بالفعل في هذا الروم! انتظر حتى تنتهي.")
 
         q = random.choice(self.questions)
-        self.lock = True
+        # 🟢 قفل الروم في البوت كاملاً
+        self.bot.global_game_lock.add(channel.id)
         
         # 📂 تحديد مسار المجلد الذي يحتوي على الصور
         image_path = os.path.join("images", q["image"])
 
-        # ⚙️ التحقق من أن ملف الصورة موجود فعلياً في المجلد لتجنب كراش البوت
+        # ⚙️ التحقق من أن ملف الصورة موجود فعلياً في المجلد
         if os.path.exists(image_path):
-            # رفع الصورة كملف حقيقي إلى ديسكورد
             file = discord.File(image_path, filename=q["image"])
             await channel.send(file=file)
         else:
-            # حل بديل ذكي في حال نسيان إضافة الصورة للمجلد
             await channel.send(f"⚠️ خطأ: لم يتم العثور على ملف الصورة في المسار: `{image_path}`")
-            self.lock = False
+            self.bot.global_game_lock.discard(channel.id) # إلغاء القفل عند الخطأ
             return
 
         def check(m):
@@ -148,19 +158,18 @@ class trrgame(commands.Cog):
                 msg = await self.bot.wait_for("message", check=check, timeout=30.0)
 
                 if msg.content.strip() == q["answer"]:
-                    user_id = str(msg.author.id)
-                    self.scores[user_id] = self.scores.get(user_id, 0) + 1
-                    self.save_scores()
+                    # 🟢 تحديث وحفظ النقاط في ملف الجيسون الموحد
+                    new_score = self.add_score(msg.author.id)
 
                     embed = discord.Embed(
                         title="🎉 صحيحة!",
                         description=f"مبروك {msg.author.mention}، لقد فزت في اللعبة!",
-                        color=discord.Color.red(),
+                        color=discord.Color.green(),
                     )
 
                     view = discord.ui.View()
                     button = discord.ui.Button(
-                        label=f"نقاطك: {self.scores[user_id]}",
+                        label=f"نقاطك الإجمالية: {new_score}",
                         style=discord.ButtonStyle.primary,
                         disabled=True,
                     )
@@ -174,7 +183,9 @@ class trrgame(commands.Cog):
         except asyncio.TimeoutError:
             await channel.send("⌛ انتهى الوقت! لم يقم أحد بالإجابة الصحيحة.")
 
-        self.lock = False
+        finally:
+            # 🟢 فتح القفل العام المشترك فور انتهاء اللعبة
+            self.bot.global_game_lock.discard(channel.id)
 
 
 async def setup(bot):

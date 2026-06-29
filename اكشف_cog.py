@@ -2,9 +2,8 @@ import discord
 from discord.ext import commands
 import asyncio
 import random
-
-# نظام حفظ النقاط
-points_db = {}
+import json
+import os
 
 # قائمة كلمات الرصيد والاقتصاد
 ECONOMY_WORDS = [
@@ -14,19 +13,44 @@ ECONOMY_WORDS = [
 class RevealWordCog(commands.Cog):
     def __init__(self, bot):
         self.bot = bot
-        self.active_channels = set()
+        self.scores_file = "global_points.json" # اسم ملف النقاط الموحد
+        
+        # 🟢 ربط القفل العام المشترك داخل البوت
+        if not hasattr(self.bot, 'global_game_lock'):
+            self.bot.global_game_lock = set()
+
+    # دالة قراءة النقاط وتحديثها في الملف الموحد مباشرة
+    def add_score(self, user_id):
+        if os.path.exists(self.scores_file):
+            with open(self.scores_file, "r", encoding="utf-8") as f:
+                try:
+                    scores = json.load(f)
+                except json.JSONDecodeError:
+                    scores = {}
+        else:
+            scores = {}
+        
+        user_id_str = str(user_id)
+        scores[user_id_str] = scores.get(user_id_str, 0) + 1
+        
+        with open(self.scores_file, "w", encoding="utf-8") as f:
+            json.dump(scores, f, ensure_ascii=False, indent=4)
+            
+        return scores[user_id_str]
 
     @commands.Cog.listener()
     async def on_message(self, message: discord.Message):
         if message.author.bot:
             return
             
-        if message.content == "اكشف":
-            if message.channel.id in self.active_channels:
-                await message.channel.send("⏳ فيه لعبة شغالة حالياً في هذا الروم، انتظر تخلص!")
+        if message.content.strip() == "اكشف":
+            # 🟢 الفحص باستخدام القفل العام للبوت
+            if message.channel.id in self.bot.global_game_lock:
+                await message.channel.send("⚠️ هناك لعبة أخرى جارية بالفعل في هذا الروم! انتظر حتى تنتهي.")
                 return
                 
-            self.active_channels.add(message.channel.id)
+            # قفل الروم في البوت كاملاً لمنع تشغيل لعبة أخرى
+            self.bot.global_game_lock.add(message.channel.id)
             
             word = random.choice(ECONOMY_WORDS)
             hidden_word = ["_" for _ in word]
@@ -70,8 +94,8 @@ class RevealWordCog(commands.Cog):
                 # نوقف اللوب حق التعديل لأن فيه شخص فاز
                 reveal_task.cancel()
                 
-                user_id = str(winner_msg.author.id)
-                points_db[user_id] = points_db.get(user_id, 0) + 1
+                # تحديث وحفظ النقاط في الملف الموحد
+                new_score = self.add_score(winner_msg.author.id)
                 
                 win_embed = discord.Embed(
                     title="",
@@ -81,7 +105,7 @@ class RevealWordCog(commands.Cog):
                 
                 view = discord.ui.View()
                 points_btn = discord.ui.Button(
-                    label=f"رصيد نقاطك: {points_db[user_id]}", 
+                    label=f"نقاطك الإجمالية: {new_score}", 
                     style=discord.ButtonStyle.success, 
                     disabled=True
                 )
@@ -99,7 +123,9 @@ class RevealWordCog(commands.Cog):
                 await message.channel.send(embed=timeout_embed)
                 
             finally:
-                self.active_channels.remove(message.channel.id)
+                # 🟢 فتح القفل العام المشترك بعد انتهاء اللعبة
+                if message.channel.id in self.bot.global_game_lock:
+                    self.bot.global_game_lock.remove(message.channel.id)
 
 async def setup(bot):
     await bot.add_cog(RevealWordCog(bot))

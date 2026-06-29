@@ -1,9 +1,8 @@
 import discord
 from discord.ext import commands
 import random
-
-# نظام حفظ النقاط
-points_db = {}
+import json
+import os
 
 # قاموس يحتوي على 100 لون مع درجات الـ RGB الدقيقة الخاصة بها
 COLORS_DICT = {
@@ -50,9 +49,12 @@ COLORS_DICT = {
 }
 
 class ColorGameView(discord.ui.View):
-    def __init__(self, correct_name, options):
+    def __init__(self, correct_name, options, cog, channel_id):
         super().__init__(timeout=30.0) 
         self.correct_name = correct_name
+        self.cog = cog
+        self.channel_id = channel_id
+        self.message_obj = None # سيتم إسناده فور إرسال الرسالة للتحكم بها عند انتهاء الوقت
         self.winner = None
         
         # إنشاء 4 أزرار بناءً على الخيارات
@@ -74,6 +76,9 @@ class ColorGameView(discord.ui.View):
         if clicked_color == self.correct_name:
             self.winner = interaction.user
             
+            # فتح القفل العام في البوت فور الإجابة الصحيحة لت السماح بألعاب أخرى
+            self.cog.bot.global_game_lock.discard(self.channel_id)
+            
             # تعطيل جميع الأزرار وتلوين الصحيح
             for child in self.children:
                 child.disabled = True
@@ -84,10 +89,8 @@ class ColorGameView(discord.ui.View):
             
             await interaction.message.edit(view=self)
             
-            # إضافة النقاط
-            user_id = str(interaction.user.id)
-            points_db[user_id] = points_db.get(user_id, 0) + 1
-            current_points = points_db[user_id]
+            # إضافة وحفظ النقاط في ملف الجيسون الموحد
+            new_score = self.cog.add_score(interaction.user.id)
             
             win_embed = discord.Embed(
                 title="🎉 إجابة صحيحة!",
@@ -97,7 +100,7 @@ class ColorGameView(discord.ui.View):
             
             points_view = discord.ui.View()
             points_btn = discord.ui.Button(
-                label=f"رصيد نقاطك: {current_points}", 
+                label=f"نقاطك الإجمالية: {new_score}", 
                 style=discord.ButtonStyle.success, 
                 disabled=True
             )
@@ -108,16 +111,68 @@ class ColorGameView(discord.ui.View):
         else:
             await interaction.response.send_message("خطأ! مو هذا اللون ❌، ركز وحاول أسرع.", ephemeral=True)
 
+    # دالة تعمل تلقائياً في حال انتهى وقت الأزرار (30 ثانية) دون إجابة صحيحة
+    async def on_timeout(self):
+        # فتح القفل العام في البوت
+        self.cog.bot.global_game_lock.discard(self.channel_id)
+        
+        # تعطيل الأزرار
+        for child in self.children:
+            child.disabled = True
+            
+        if self.message_obj:
+            try:
+                timeout_embed = discord.Embed(
+                    title="⌛ انتهى الوقت!",
+                    description=f"محد قدر يكتشف اللون الصحيح في الوقت المحدد.\nاللون الصحيح كان: **{self.correct_name}** 🎨",
+                    color=discord.Color.red()
+                )
+                await self.message_obj.edit(embed=timeout_embed, view=self)
+            except:
+                pass
+
 class ColorGameCog(commands.Cog):
     def __init__(self, bot):
         self.bot = bot
+        self.scores_file = "global_points.json" # اسم ملف النقاط الموحد
+        
+        # التأكد من ربط القفل العام المشترك داخل كائن البوت
+        if not hasattr(self.bot, 'global_game_lock'):
+            self.bot.global_game_lock = set()
+
+    # دالة قراءة النقاط وتحديثها في الملف الموحد مباشرة
+    def add_score(self, user_id):
+        if os.path.exists(self.scores_file):
+            with open(self.scores_file, "r", encoding="utf-8") as f:
+                try:
+                    scores = json.load(f)
+                except json.JSONDecodeError:
+                    scores = {}
+        else:
+            scores = {}
+        
+        user_id_str = str(user_id)
+        scores[user_id_str] = scores.get(user_id_str, 0) + 1
+        
+        with open(self.scores_file, "w", encoding="utf-8") as f:
+            json.dump(scores, f, ensure_ascii=False, indent=4)
+            
+        return scores[user_id_str]
 
     @commands.Cog.listener()
     async def on_message(self, message: discord.Message):
         if message.author.bot:
             return
             
-        if message.content == "الوان":
+        if message.content.strip() == "الوان":
+            # 🟢 الفحص باستخدام القفل العام المشترك لمنع التداخل
+            if message.channel.id in self.bot.global_game_lock:
+                await message.channel.send("⚠️ هناك لعبة جارية بالفعل في هذا الروم! انتظر حتى تنتهي.")
+                return
+                
+            # قفل الروم في البوت كاملاً لمنع أي لعبة أخرى من البدء
+            self.bot.global_game_lock.add(message.channel.id)
+            
             all_colors = list(COLORS_DICT.keys())
             
             # سحب 4 ألوان عشوائية
@@ -131,17 +186,17 @@ class ColorGameCog(commands.Cog):
             hex_color = f"{r:02x}{g:02x}{b:02x}"
             image_url = f"https://singlecolorimage.com/get/{hex_color}/200x200"
             
-            # إعداد الإمبد (شريط الإمبد + صورة مربعة كبيرة تمثل اللون الفعلي بدقة 100%)
+            # إعداد الإمبد
             embed = discord.Embed(
                 title="🎨 لعبة الألوان",
                 description="خمن وش هذا اللون المعروض بالصورة بأسرع وقت؟",
                 color=discord.Color.from_rgb(r, g, b)
             )
-            # عرض صورة اللون الدقيقة
             embed.set_thumbnail(url=image_url) 
             
-            view = ColorGameView(correct_name, options)
-            await message.channel.send(embed=embed, view=view)
+            view = ColorGameView(correct_name, options, self, message.channel.id)
+            msg = await message.channel.send(embed=embed, view=view)
+            view.message_obj = msg # تمرير الرسالة للكلاس للتحكم بها عند الـ timeout
 
 async def setup(bot):
     await bot.add_cog(ColorGameCog(bot))
