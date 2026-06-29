@@ -1,7 +1,6 @@
 import discord
 from discord.ext import commands
 import random
-import asyncio
 
 # قائمة كلمات مقترحة
 WORD_BANK = [
@@ -11,6 +10,35 @@ WORD_BANK = [
     "بحيرة", "جزيرة", "شاطئ", "رمال", "صخرة", "ذهب", "فضة", "حديد", "نحاس", "خشب",
     "ورق", "قلم", "كتاب", "رسالة", "خريطة", "بوصلة", "كنز", "مفتاح", "قفل", "باب"
 ]
+
+class LeaderBoardButton(discord.ui.Button):
+    def __init__(self, word, color, row):
+        # تلوين الأزرار للقائد حسب اللون الحقيقي
+        if color == "red":
+            style = discord.ButtonStyle.danger
+            label_text = word
+        elif color == "blue":
+            style = discord.ButtonStyle.primary
+            label_text = word
+        elif color == "black":
+            style = discord.ButtonStyle.secondary
+            label_text = f"💀 {word}"
+        else: # الكلمات المحايدة (لا تتبع لأي فريق)
+            style = discord.ButtonStyle.success
+            label_text = word
+
+        super().__init__(style=style, label=label_text, row=row, disabled=True)
+
+class LeaderBoardView(discord.ui.View):
+    def __init__(self, words_dict):
+        super().__init__(timeout=None)
+        row = 0
+        count = 0
+        for word, color in words_dict.items():
+            self.add_item(LeaderBoardButton(word, color, row))
+            count += 1
+            if count % 5 == 0:
+                row += 1
 
 class HintModal(discord.ui.Modal, title="تقديم تلميح"):
     word = discord.ui.TextInput(
@@ -38,17 +66,15 @@ class HintModal(discord.ui.Modal, title="تقديم تلميح"):
         self.game.remaining_guesses = int(self.count.value)
         self.game.hint_given = True
 
-        team_name = "🔴 الأحمر" if self.game.current_turn == "red" else "🔵 الأزرق"
-        await interaction.response.send_message(f"✅ تم إرسال التلميح لفريقك بنجاح!", ephemeral=True)
-        await self.game.channel.send(f"📢 **تلميح الفريق {team_name}:** الكلمة ( **{self.word.value}** ) - العدد: **{self.count.value}**\nيمكن للأعضاء الآن اختيار الكلمات!")
-        await self.game.update_control_panel()
+        await interaction.response.send_message("✅ تم إرسال التلميح بنجاح!", ephemeral=True)
+        await self.game.update_status_message()
 
 class ControlView(discord.ui.View):
     def __init__(self, game):
         super().__init__(timeout=None)
         self.game = game
 
-    @discord.ui.button(label="تقديم تلميح", style=discord.ButtonStyle.success, custom_id="btn_hint")
+    @discord.ui.button(label="💡 تقديم تلميح", style=discord.ButtonStyle.success, custom_id="btn_hint")
     async def hint_button(self, interaction: discord.Interaction, button: discord.ui.Button):
         is_red_turn = self.game.current_turn == "red"
         active_leader = self.game.red_leader if is_red_turn else self.game.blue_leader
@@ -63,6 +89,20 @@ class ControlView(discord.ui.View):
 
         await interaction.response.send_modal(HintModal(self.game))
 
+    @discord.ui.button(label="🗺️ عرض خريطة القائد", style=discord.ButtonStyle.secondary, custom_id="btn_show_map")
+    async def show_map_button(self, interaction: discord.Interaction, button: discord.ui.Button):
+        # التحقق من أن المستخدم هو أحد القادة (أحمر أو أزرق)
+        if interaction.user not in [self.game.red_leader, self.game.blue_leader]:
+            await interaction.response.send_message("❌ هذا الزر مخصص للقادة فقط!", ephemeral=True)
+            return
+        
+        # إرسال الخريطة كرسالة مخفية (ephemeral)
+        await interaction.response.send_message(
+            "🗺️ **هذه خريطة الكلمات الخاصة بك (لا تشاركها مع أحد):**\n🔴 أحمر | 🔵 أزرق | 🟢 محايد | 💀 أسود (خسارة فورية)", 
+            view=LeaderBoardView(self.game.words_dict), 
+            ephemeral=True
+        )
+
 class BoardButton(discord.ui.Button):
     def __init__(self, word, color, row, game):
         super().__init__(style=discord.ButtonStyle.secondary, label=word, row=row)
@@ -71,17 +111,14 @@ class BoardButton(discord.ui.Button):
         self.game = game
 
     async def callback(self, interaction: discord.Interaction):
-        # 1. منع تداخل الضغطات (تأمين الزر إذا كان هناك شخص آخر يضغط في نفس اللحظة)
         if self.game.is_processing:
-            await interaction.response.send_message("⏳ يتم الآن معالجة ضغطة أخرى، الرجاء الانتظار للحظة...", ephemeral=True)
+            await interaction.response.send_message("⏳ يتم الآن معالجة ضغطة أخرى...", ephemeral=True)
             return
 
-        # 2. التحقق من أن المستخدم ليس قائداً
         if interaction.user in [self.game.red_leader, self.game.blue_leader]:
             await interaction.response.send_message("❌ القادة لا يمكنهم اختيار الكلمات! الأعضاء فقط من يضغطون الأزرار.", ephemeral=True)
             return
 
-        # 3. التحقق من أن المستخدم عضو في الفريق صاحب الدور
         is_red_turn = self.game.current_turn == "red"
         active_members = self.game.red_members if is_red_turn else self.game.blue_members
         
@@ -89,7 +126,6 @@ class BoardButton(discord.ui.Button):
             await interaction.response.send_message("❌ ليس دور فريقك أو أنك لست عضواً في هذا الفريق!", ephemeral=True)
             return
 
-        # 4. التحقق من وجود تلميح ووجود محاولات متبقية
         if not self.game.hint_given:
             await interaction.response.send_message("❌ القائد لم يعطِ تلميحاً بعد!", ephemeral=True)
             return
@@ -98,55 +134,50 @@ class BoardButton(discord.ui.Button):
             await interaction.response.send_message("❌ لقد استنفدتم عدد المحاولات المتاحة لهذا التلميح!", ephemeral=True)
             return
 
-        # تفعيل القفل لمنع اللخبطة
         self.game.is_processing = True
         
         try:
-            # كشف الزر
             self.disabled = True
             self.game.remaining_guesses -= 1
 
             if self.real_color == "red":
                 self.style = discord.ButtonStyle.danger
-                if is_red_turn:
-                    self.game.red_score += 1
-                else:
-                    self.game.red_score += 1 
+                self.game.red_score += 1
             elif self.real_color == "blue":
                 self.style = discord.ButtonStyle.primary
-                if not is_red_turn:
-                    self.game.blue_score += 1
-                else:
-                    self.game.blue_score += 1 
+                self.game.blue_score += 1
+            elif self.real_color == "black":
+                self.style = discord.ButtonStyle.secondary
+                self.label = f"💀 {self.word}"
             else:
                 self.style = discord.ButtonStyle.success 
-                self.label = f"💀 {self.word}"
+                self.label = f"⬜ {self.word}"
 
             await interaction.response.edit_message(view=self.view)
 
-            # منطق الفوز والخسارة وتغيير الدور
+            # حالة الخسارة الفورية
             if self.real_color == "black":
                 loser = "🔴 الأحمر" if is_red_turn else "🔵 الأزرق"
                 winner = "🔵 الأزرق" if is_red_turn else "🔴 الأحمر"
-                await self.game.channel.send(f"💀 **كارثة!** قام فريق {loser} باختيار الكلمة السوداء!\n🏆 **الفريق الفائز هو {winner}!**")
-                await self.game.end_game()
+                await self.game.end_game(f"💀 **كارثة!** قام فريق {loser} باختيار الكلمة السوداء!\n🏆 **الفريق الفائز هو {winner}!**")
                 return
 
-            if self.game.red_score == 11:
-                await self.game.channel.send("🏆 **فاز الفريق الأحمر 🔴 بجميع كلماته!**")
-                await self.game.end_game()
+            # حالة الفوز (الوصول لـ 10 نقاط)
+            if self.game.red_score == 10:
+                await self.game.end_game("🏆 **فاز الفريق الأحمر 🔴 بجميع كلماته (10/10)!**")
                 return
-            elif self.game.blue_score == 11:
-                await self.game.channel.send("🏆 **فاز الفريق الأزرق 🔵 بجميع كلماته!**")
-                await self.game.end_game()
+            elif self.game.blue_score == 10:
+                await self.game.end_game("🏆 **فاز الفريق الأزرق 🔵 بجميع كلماته (10/10)!**")
                 return
 
-            # تغيير الدور إذا ضغط لون الفريق الخصم أو انتهت المحاولات
-            if (is_red_turn and self.real_color != "red") or (not is_red_turn and self.real_color != "blue") or (self.game.remaining_guesses == 0):
+            # تغيير الدور إذا ضغط لون خاطئ أو انتهت المحاولات
+            if (is_red_turn and self.real_color != "red") or (not is_red_turn and self.real_color != "blue") or (self.game.remaining_guesses <= 0):
                 await self.game.switch_turn()
+            else:
+                # تحديث العداد فقط في الرسالة الأساسية
+                await self.game.update_status_message()
         
         finally:
-            # إزالة القفل بعد الانتهاء
             self.game.is_processing = False
 
 class BoardView(discord.ui.View):
@@ -176,78 +207,66 @@ class GameSession:
         self.hint_word = None
         self.remaining_guesses = 0
         self.hint_given = False
-        self.is_processing = False # قفل الأزرار لمنع التداخل
+        self.is_processing = False 
         
+        self.status_msg = None
         self.board_msg = None
         self.control_msg = None
         self.words_dict = self.generate_board()
 
     def generate_board(self):
         chosen_words = random.sample(WORD_BANK, 25)
-        colors = ['red']*11 + ['blue']*11 + ['black']*3
+        # 10 حمراء، 10 زرقاء، 1 سوداء، 4 محايدة
+        colors = ['red']*10 + ['blue']*10 + ['black']*1 + ['neutral']*4
         random.shuffle(colors)
         return dict(zip(chosen_words, colors))
 
-    async def start(self):
-        red_words = [w for w, c in self.words_dict.items() if c == "red"]
-        blue_words = [w for w, c in self.words_dict.items() if c == "blue"]
-        black_words = [w for w, c in self.words_dict.items() if c == "black"]
-
-        red_msg = f"🔴 **أنت قائد الفريق الأحمر** 🔴\nكلمات فريقك (11): {', '.join(red_words)}\n💀 الكلمات السوداء (تجنبها!): {', '.join(black_words)}"
-        blue_msg = f"🔵 **أنت قائد الفريق الأزرق** 🔵\nكلمات فريقك (11): {', '.join(blue_words)}\n💀 الكلمات السوداء (تجنبها!): {', '.join(black_words)}"
-
-        try:
-            await self.red_leader.send(red_msg)
-            await self.blue_leader.send(blue_msg)
-        except discord.Forbidden:
-            await self.channel.send("⚠️ تنبيه: أحد القادة أو كلاهما مقفل رسائل الخاص! اللعبة تتطلب فتح الخاص لرؤية الكلمات.")
-
-        for member in self.red_members:
-            try:
-                await member.send("🔴 **أنت عضو عادي في الفريق الأحمر** 🔴\nانتظر تلميح قائدك واضغط على الأزرار الصحيحة في السيرفر!")
-            except discord.Forbidden:
-                pass
-        for member in self.blue_members:
-            try:
-                await member.send("🔵 **أنت عضو عادي في الفريق الأزرق** 🔵\nانتظر تلميح قائدك واضغط على الأزرار الصحيحة في السيرفر!")
-            except discord.Forbidden:
-                pass
-
-        turn_str = "🔴 الأحمر" if self.current_turn == "red" else "🔵 الأزرق"
-        await self.channel.send(f"🎲 **بدأت اللعبة!** الدور الأول عشوائياً لفريق: **{turn_str}**")
+    def get_status_text(self):
+        turn_str = "🔴 الفريق الأحمر" if self.current_turn == "red" else "🔵 الفريق الأزرق"
+        text = f"🎮 **الدور الحالي:** {turn_str}\n"
+        text += f"📊 **النقاط:** 🔴 الأحمر: {self.red_score}/10 | 🔵 الأزرق: {self.blue_score}/10\n"
+        text += "──────────────\n"
         
+        if self.hint_given:
+            text += f"💡 **تلميح القائد:** ( **{self.hint_word}** ) | **المحاولات المتبقية:** {self.remaining_guesses}\n"
+            text += "👈 **يمكن لأعضاء الفريق الآن الضغط على الأزرار.**"
+        else:
+            text += "⏳ **بانتظار القائد لتقديم تلميح...**"
+            
+        return text
+
+    async def start(self):
+        # لم يعد هناك إرسال للخاص، كل شيء يتم عبر الأزرار في السيرفر
+        self.status_msg = await self.channel.send(self.get_status_text())
         self.board_msg = await self.channel.send(view=BoardView(self))
-        self.control_msg = await self.channel.send(f"🎮 لوحة تحكم القادة | الدور الحالي: {turn_str}", view=ControlView(self))
+        self.control_msg = await self.channel.send("⚙️ **لوحة تحكم القادة**", view=ControlView(self))
 
     async def switch_turn(self):
         self.current_turn = "blue" if self.current_turn == "red" else "red"
         self.hint_given = False
         self.hint_word = None
         self.remaining_guesses = 0
-        turn_str = "🔴 الأحمر" if self.current_turn == "red" else "🔵 الأزرق"
-        await self.channel.send(f"🔄 **انتهى الدور!** الدور الآن لفريق: **{turn_str}**\nننتظر تلميح القائد...")
-        await self.update_control_panel()
+        await self.update_status_message()
 
-    async def update_control_panel(self):
-        if self.control_msg:
-            turn_str = "🔴 الأحمر" if self.current_turn == "red" else "🔵 الأزرق"
-            await self.control_msg.edit(content=f"🎮 لوحة تحكم القادة | الدور الحالي: {turn_str}", view=ControlView(self))
+    async def update_status_message(self):
+        if self.status_msg:
+            await self.status_msg.edit(content=self.get_status_text())
 
-    async def end_game(self):
+    async def end_game(self, final_message):
+        if self.status_msg:
+            await self.status_msg.edit(content=final_message)
         if self.control_msg:
-            await self.control_msg.edit(content="🏁 **انتهت اللعبة!**", view=None)
+            await self.control_msg.delete()
 
 class SetupView(discord.ui.View):
     def __init__(self):
-        # تم تحديد وقت الانتظار بـ 30 ثانية
         super().__init__(timeout=30.0) 
         self.red_leader = None
         self.blue_leader = None
         self.red_members = set()
         self.blue_members = set()
-        self.message = None # سيتم تعيينه بعد إرسال الرسالة لتحديثها عند انتهاء الوقت
+        self.message = None 
 
-    # دالة يتم استدعاؤها تلقائياً عند انتهاء الـ 30 ثانية
     async def on_timeout(self):
         for item in self.children:
             item.disabled = True
@@ -288,7 +307,6 @@ class SetupView(discord.ui.View):
             return
 
         await interaction.response.send_message("✅ جاري تجهيز اللعبة...", ephemeral=True)
-        # نوقف التايمر بمجرد بدء اللعبة حتى لا يلغيها
         self.stop() 
         
         game = GameSession(
@@ -312,7 +330,6 @@ class CodenamesCog(commands.Cog):
             color=discord.Color.dark_theme()
         )
         view = SetupView()
-        # حفظ رسالة الـ View حتى نتمكن من تعديلها إذا انتهى الوقت (Timeout)
         view.message = await ctx.send(embed=embed, view=view)
 
 async def setup(bot):
