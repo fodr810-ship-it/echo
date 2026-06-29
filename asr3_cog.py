@@ -137,7 +137,7 @@ class fastgame(commands.Cog):
             
         return scores[user_id_str]
 
-    @commands.command(name="صحح")
+    @commands.command(name="اسرع")
     async def start_game_cmd(self, ctx):
         await self.run_game(ctx.channel)
 
@@ -145,7 +145,7 @@ class fastgame(commands.Cog):
     async def on_message(self, message):
         if message.author.bot:
             return
-        if message.content.strip() == "صحح":
+        if message.content.strip() == "اسرع":
             await self.run_game(message.channel)
 
     async def run_game(self, channel):
