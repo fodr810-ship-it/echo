@@ -3,7 +3,6 @@ from discord.ext import commands
 import random
 from collections import Counter
 
-# --- قاعدة البيانات ---
 WORDS_BANK = {
     "حيوانات": ["أسد", "فيل", "زرافة", "نمر", "قرد", "حصان", "كلب", "قطة", "دب", "ثعلب"],
     "ملابس": ["قميص", "بنطال", "فستان", "حذاء", "قبعة", "معطف", "جورب", "شال", "قفاز", "نظارة"],
@@ -13,7 +12,6 @@ WORDS_BANK = {
     "كورة": ["ملعب", "مدرجات", "كأس", "صافرة", "حذاء", "مرمى", "شباك", "راية", "مدافع", "مدرب"]
 }
 
-# --- كلاس اللعبة ---
 class GameSession:
     def __init__(self, channel, host, players):
         self.channel = channel
@@ -34,7 +32,20 @@ class GameSession:
         self.guess_options = random.sample(other, 7) + [self.topic]
         random.shuffle(self.guess_options)
 
-# --- واجهات الأزرار ---
+class GuessButtons(discord.ui.View):
+    def __init__(self, game):
+        super().__init__(timeout=None)
+        for word in game.guess_options:
+            btn = discord.ui.Button(label=word, style=discord.ButtonStyle.secondary)
+            async def callback(i, word=word):
+                if word == game.topic:
+                    await i.response.send_message(f"🎉 صح! {game.imposter.mention} عرف السالفة وفاز!", ephemeral=False)
+                else:
+                    await i.response.send_message(f"❌ خطأ! السالفة كانت: **{game.topic}**. فاز اللاعبون!", ephemeral=False)
+                self.stop()
+            btn.callback = callback
+            self.add_item(btn)
+
 class GameView(discord.ui.View):
     def __init__(self, game):
         super().__init__(timeout=None)
@@ -43,14 +54,9 @@ class GameView(discord.ui.View):
     @discord.ui.button(label="📜 وش السالفة؟", style=discord.ButtonStyle.primary)
     async def show_topic(self, interaction: discord.Interaction, button: discord.ui.Button):
         if interaction.user == self.game.imposter:
-            await interaction.response.send_message("🕵️ أنت برا السالفة! حاول تندمج.", ephemeral=True)
+            await interaction.response.send_message("🕵️ أنت برا السالفة!", ephemeral=True)
         else:
-            await interaction.response.send_message(f"📖 السالفة: **{self.game.topic}** (التصنيف: {self.game.category})", ephemeral=True)
-
-    @discord.ui.button(label="🗣️ الدور التالي", style=discord.ButtonStyle.secondary)
-    async def next_turn(self, interaction: discord.Interaction, button: discord.ui.Button):
-        self.game.turn_index = (self.game.turn_index + 1) % len(self.game.players)
-        await interaction.response.send_message(f"👉 الدور على: {self.game.players[self.game.turn_index].mention}")
+            await interaction.response.send_message(f"📖 السالفة: **{self.game.topic}**", ephemeral=True)
 
     @discord.ui.button(label="🗳️ تصويت", style=discord.ButtonStyle.danger)
     async def vote(self, interaction: discord.Interaction, button: discord.ui.Button):
@@ -66,15 +72,17 @@ class GameView(discord.ui.View):
         
         select.callback = select_callback
         view.add_item(select)
-        await interaction.response.send_message(view=view, ephemeral=True)
+        # إرسال التصويت كـ Embed
+        embed = discord.Embed(title="التصويت", description="صوتوا للشخص اللي تعتقدون أنه برا السالفة:", color=discord.Color.red())
+        await interaction.response.send_message(embed=embed, view=view, ephemeral=True)
 
     async def tally(self, i):
-        # فرز بسيط (الأكثر تكراراً)
         most_voted = Counter(self.game.votes.values()).most_common(1)[0][0]
         if most_voted == self.game.imposter.id:
-            await i.channel.send(f"🚨 كشفتوه! هو {self.game.imposter.mention}. هل يعرف السالفة؟ (انتظر خيارات التخمين)")
+            await i.channel.send(f"🚨 كشفتوه! هو {self.game.imposter.mention}. \nيا {self.game.imposter.mention}، اختر السالفة الصحيحة لتفوز:")
+            await i.channel.send(view=GuessButtons(self.game))
         else:
-            await i.channel.send(f"❌ خطأ! الفائز هو {self.game.imposter.mention} (كان برا السالفة)")
+            await i.channel.send(f"❌ خطأ! الفائز هو {self.game.imposter.mention} (كان برا السالفة)!")
 
 class LobbyView(discord.ui.View):
     def __init__(self, host):
@@ -87,21 +95,26 @@ class LobbyView(discord.ui.View):
     async def join(self, interaction: discord.Interaction, button: discord.ui.Button):
         if interaction.user not in self.players:
             self.players.append(interaction.user)
-            await interaction.response.edit_message(content=f"اللاعبين: {len(self.players)}")
+            await interaction.response.edit_message(content=f"اللاعبين المنضمين: {len(self.players)}")
 
     async def on_timeout(self):
-        if len(self.players) < 3: return
-        game = GameSession(self.msg.channel, self.host, self.players)
-        view = discord.ui.View()
-        select = discord.ui.Select(placeholder="اختر تصنيف...", options=[discord.SelectOption(label=c) for c in WORDS_BANK])
-        async def cat_callback(i):
-            game.start(select.values[0])
-            await i.response.edit_message(content="🎮 بدأت اللعبة!", view=GameView(game))
-        select.callback = cat_callback
-        view.add_item(select)
-        await self.msg.edit(content="اختر التصنيف:", view=view)
+        if not self.msg: return
+        try:
+            if len(self.players) < 3:
+                await self.msg.edit(content="❌ العدد غير كافٍ.", view=None)
+            else:
+                game = GameSession(self.msg.channel, self.host, self.players)
+                view = discord.ui.View()
+                select = discord.ui.Select(placeholder="اختر تصنيف...", options=[discord.SelectOption(label=c) for c in WORDS_BANK])
+                async def cat_callback(i):
+                    game.start(select.values[0])
+                    await i.response.edit_message(content="🎮 بدأت اللعبة!", view=GameView(game))
+                select.callback = cat_callback
+                view.add_item(select)
+                await self.msg.edit(content="اختر التصنيف:", view=view)
+        except discord.NotFound:
+            pass
 
-# --- الكوج ---
 class SalfaCog(commands.Cog):
     def __init__(self, bot):
         self.bot = bot
